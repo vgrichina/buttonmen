@@ -130,8 +130,23 @@ Bun.serve({
         default:
           return new Response('Action not found', { status: 404 });
       }
-    } else if (request.method === 'GET' && action === 'status') {
-      return new Response(JSON.stringify(getGameStatus(gameId)), { status: 200 });
+    } else if (request.method === 'GET') {
+      if (action === 'status') {
+        return new Response(JSON.stringify(getGameStatus(gameId)), { status: 200 });
+      }
+
+      // Return the static files
+      try {
+        const fileUrl = new URL(url.pathname
+            .replace(/^\//, './')
+            .replace(/\/$/, '/index.html'),
+          new URL('./dist/', new URL(import.meta.url)));
+        const file = await Bun.file(fileUrl);
+        return new Response(file);
+      } catch (e) {
+        console.error('Error', e);
+        return new Response('Not found', { status: 404 });
+      }
     } else {
       return new Response('Method not allowed', { status: 405 });
     }
