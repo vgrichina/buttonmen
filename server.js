@@ -6,10 +6,10 @@ const createGame = (playerId) => {
     players: [playerId, null],
     currentPlayer: 1,
     scores: [0, 0],
-    dice: {
-      player1: [4, 6, 8, 10, 20].map(rollDie),
-      player2: [4, 6, 8, 10, 20].map(rollDie),
-    },
+    dice: [
+      [4, 6, 8, 10, 20].map(rollDie),
+      [4, 6, 8, 10, 20].map(rollDie),
+    ],
   };
   return newGameId;
 };
@@ -27,14 +27,12 @@ const performAttack = (gameId, playerId, attackerDieIndices, defenderDieIndex) =
   }
 
   const currentPlayerIndex = game.players.indexOf(playerId);
-  const currentPlayer = `player${currentPlayerIndex + 1}`;
   if (game.currentPlayer !== currentPlayerIndex + 1) {
     return { message: 'It is not your turn' };
   }
 
-  const attackerDice = game.dice[currentPlayer];
-  const opponentPlayer = `player${game.currentPlayer % 2 + 1}`;
-  const defenderDice = game.dice[opponentPlayer];
+  const attackerDice = game.dice[(game.currentPlayer - 1) % 2];
+  const defenderDice = game.dice[game.currentPlayer % 2];
   console.log('defenderDice', defenderDice);
 
   // Perform power attack or skill attack based on the number of attacker dice indices
