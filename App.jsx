@@ -98,9 +98,9 @@ const App = () => {
     setSelectedDefenderDie(null);
   };
 
-  const renderDice = (playerDice, playerNumber, isDefender) => (
+  const renderDice = (playerDice, playerId, isDefender) => (
     <div>
-      <h3>Player {playerNumber}'s Dice:</h3>
+      <h3>Player {playerId}'s Dice:</h3>
       {playerDice.map((die, index) => {
         const isSelected = isDefender
           ? index === selectedDefenderDie
@@ -110,7 +110,6 @@ const App = () => {
           <button
             key={index}
             onClick={() => isDefender ? selectDefenderDieForAttack(index) : selectDieForAttack(index)}
-            disabled={!isDefender && playerNumber !== gameState.currentPlayer}
             style={{ backgroundColor: isSelected ? 'yellow' : 'white' }}
           >
             <Dice value={die.value} size={die.size} />
@@ -138,8 +137,8 @@ const App = () => {
         gameState &&
         <>
           <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
-          {gameState && renderDice(gameState.dice.player1, 1, gameState.currentPlayer === 2)}
-          {gameState && renderDice(gameState.dice.player2, 2, gameState.currentPlayer === 1)}
+          {gameState && renderDice(gameState.dice.player1, gameState.players[0], gameState.currentPlayer === 2)}
+          {gameState && renderDice(gameState.dice.player2, gameState.players[1], gameState.currentPlayer === 1)}
           <button onClick={performAttack} disabled={gameState && gameState.players[gameState.currentPlayer - 1] !== playerId}>Attack</button>
         </>
       )}
