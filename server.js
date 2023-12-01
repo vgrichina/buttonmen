@@ -7,8 +7,8 @@ const createGame = (playerId) => {
     currentPlayer: 1,
     scores: [0, 0],
     dice: [
-      [4, 6, 8, 10, 20].map(rollDie),
-      [4, 6, 8, 10, 20].map(rollDie),
+      [4, 6, 8, 10, 20].map(rollDie), // TODO: Roll dice according to character sheet
+      [],
     ],
   };
   return newGameId;
@@ -117,6 +117,8 @@ function joinGame(gameId, playerId) {
 
   // Assign the player to the game
   game.players[playerIndex] = playerId;
+  // TODO: Roll dice according to character sheet
+  game.dice[playerIndex] = [4, 6, 8, 10, 20].map(rollDie);
 
   // Update the game state
   games[gameId] = game;
