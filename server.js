@@ -46,7 +46,10 @@ const performAttack = (gameId, playerId, attackerDieIndices, defenderDieIndex) =
       console.log('Power attack successful', attackerDie, defenderDice[defenderDieIndex]);
       attackSuccess = true;
       game.scores[currentPlayerIndex] += defenderDice[defenderDieIndex].size;
-      defenderDice.splice(defenderDieIndex, 1); // Capture the die
+      // Capture the die
+      defenderDice.splice(defenderDieIndex, 1);
+      // Re-roll attacker die
+      attackerDice[attackerDieIndices[0]] = rollDie(attackerDie.size);
     } else {
       // TODO: Fail attack
     }
@@ -57,7 +60,12 @@ const performAttack = (gameId, playerId, attackerDieIndices, defenderDieIndex) =
       console.log('Skill attack successful', attackValue, defenderDice[defenderDieIndex]);
       attackSuccess = true;
       game.scores[currentPlayerIndex] += defenderDice[defenderDieIndex].size;
-      defenderDice.splice(defenderDieIndex, 1); // Capture the die
+      // Capture the die
+      defenderDice.splice(defenderDieIndex, 1);
+      // Re-roll attacker dice
+      attackerDieIndices.forEach(index => {
+        attackerDice[index] = rollDie(attackerDice[index].size);
+      });
     } else {
       // TODO: Fail attack
     }
