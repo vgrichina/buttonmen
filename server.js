@@ -1,9 +1,9 @@
 const games = {};
 
-const createGame = () => {
+const createGame = (playerId) => {
   const newGameId = `game_${Date.now()}`;
   games[newGameId] = {
-    players: [null, null],
+    players: [playerId, null],
     currentPlayer: 1,
     scores: [0, 0],
     dice: {
@@ -42,20 +42,24 @@ const performAttack = (gameId, playerId, attackerDieIndices, defenderDieIndex) =
   if (attackerDieIndices.length === 1) {
     // Power attack
     const attackerDie = attackerDice[attackerDieIndices[0]];
-    if (attackerDie.value > defenderDice[defenderDieIndex].value) {
+    if (attackerDie.value >= defenderDice[defenderDieIndex].value) {
+      console.log('Power attack successful', attackerDie, defenderDice[defenderDieIndex]);
       attackSuccess = true;
       game.scores[currentPlayerIndex] += defenderDice[defenderDieIndex].size;
       defenderDice.splice(defenderDieIndex, 1); // Capture the die
+    } else {
+      // TODO: Fail attack
     }
   } else {
     // Skill attack
     const attackValue = attackerDieIndices.reduce((acc, index) => acc + attackerDice[index].value, 0);
-    console.log('defenderDieIndex', defenderDieIndex);
-    console.log('defenderDice[defenderDieIndex]', defenderDice[defenderDieIndex]);
     if (attackValue === defenderDice[defenderDieIndex].value) {
+      console.log('Skill attack successful', attackValue, defenderDice[defenderDieIndex]);
       attackSuccess = true;
       game.scores[currentPlayerIndex] += defenderDice[defenderDieIndex].size;
       defenderDice.splice(defenderDieIndex, 1); // Capture the die
+    } else {
+      // TODO: Fail attack
     }
   }
 
@@ -81,22 +85,28 @@ const getGameStatus = gameId => {
   return game;
 }
 
+function getOpenGames() {
+  return Object.entries(games)
+    .filter(([gameId, game]) => game.players.includes(null))
+    .map(([gameId, game]) => ({ gameId, ...game }));
+}
+
 function joinGame(gameId, playerId) {
   // Check if the game exists
   const game = games[gameId];
   if (!game) {
-    return { error: 'Game not found' };
+    throw new Error(`Game not found: ${gameId}`);
   }
 
   // Check if the player has already joined
   if (game.players.includes(playerId)) {
-    return { error: 'Player already joined' };
+    throw new Error(`Player ${playerId} has already joined game ${gameId}`);
   }
 
   // Find an empty slot for the player
   const playerIndex = game.players.indexOf(null);
   if (playerIndex === -1) {
-    return { error: 'Game is full' };
+    throw new Error(`Game is full: ${gameId}`);
   }
 
   // Assign the player to the game
@@ -111,44 +121,50 @@ function joinGame(gameId, playerId) {
 Bun.serve({
   async fetch(request) {
     const url = new URL(request.url);
-    const gameId = url.pathname.split('/')[3];
-    const action = url.pathname.split('/')[4];
 
-    if (request.method === 'POST') {
-      const playerId = request.headers.get('X-Player-Id');
-      
-      switch (action) {
-        case undefined:
-          const newGameId = createGame();
-          return new Response(JSON.stringify({ gameId: newGameId }), { status: 200 });
-        case 'join':
-          return new Response(JSON.stringify(joinGame(gameId, playerId)), { status: 200 });
-        case 'attack':
-          const requestBody = await request.json();
-          const { attackerDieIndices, defenderDieIndex } = requestBody;
-          return new Response(JSON.stringify(performAttack(gameId, playerId, attackerDieIndices, defenderDieIndex)), { status: 200 });
-        default:
-          return new Response('Action not found', { status: 404 });
-      }
-    } else if (request.method === 'GET') {
-      if (action === 'status') {
-        return new Response(JSON.stringify(getGameStatus(gameId)), { status: 200 });
-      }
+    if (url.pathname.startsWith('/api/games')) {
+      const [,,, gameId, action] = url.pathname.split('/');
 
-      // Return the static files
-      try {
-        const fileUrl = new URL(url.pathname
-            .replace(/^\//, './')
-            .replace(/\/$/, '/index.html'),
-          new URL('./dist/', new URL(import.meta.url)));
-        const file = await Bun.file(fileUrl);
-        return new Response(file);
-      } catch (e) {
-        console.error('Error', e);
-        return new Response('Not found', { status: 404 });
+      if (request.method === 'POST') {
+        const playerId = request.headers.get('X-Player-Id');
+        
+        switch (action) {
+          case undefined:
+            const newGameId = createGame(playerId);
+            return new Response(JSON.stringify({ gameId: newGameId }), { status: 200 });
+          case 'join':
+            return new Response(JSON.stringify(joinGame(gameId, playerId)), { status: 200 });
+          case 'attack':
+            const requestBody = await request.json();
+            const { attackerDieIndices, defenderDieIndex } = requestBody;
+            return new Response(JSON.stringify(performAttack(gameId, playerId, attackerDieIndices, defenderDieIndex)), { status: 200 });
+          default:
+            return new Response('Action not found', { status: 404 });
+        }
+      } else if (request.method === 'GET') {
+        if (action === 'status') {
+          return new Response(JSON.stringify(getGameStatus(gameId)), { status: 200 });
+        }
+
+        if (!action) {
+          return new Response(JSON.stringify(getOpenGames(games)), { status: 200 });
+        }
+      } else {
+        return new Response('Method not allowed', { status: 405 });
       }
-    } else {
-      return new Response('Method not allowed', { status: 405 });
+    }
+
+    // Return the static files
+    try {
+      const fileUrl = new URL(url.pathname
+        .replace(/^\//, './')
+        .replace(/\/$/, '/index.html'),
+        new URL('./dist/', new URL(import.meta.url)));
+      const file = await Bun.file(fileUrl);
+      return new Response(file);
+    } catch (e) {
+      console.error('Error', e);
+      return new Response('Not found', { status: 404 });
     }
   }
 });
