@@ -37,36 +37,31 @@ const performAttack = (gameId, playerId, attackerDieIndices, defenderDieIndex) =
 
   // Perform power attack or skill attack based on the number of attacker dice indices
   let attackSuccess = false;
+  const attackValue = attackerDieIndices.reduce((acc, index) => acc + attackerDice[index].value, 0);
   if (attackerDieIndices.length === 1) {
     // Power attack
-    const attackerDie = attackerDice[attackerDieIndices[0]];
-    if (attackerDie.value >= defenderDice[defenderDieIndex].value) {
-      console.log('Power attack successful', attackerDie, defenderDice[defenderDieIndex]);
+    if (attackValue >= defenderDice[defenderDieIndex].value) {
+      console.log('Power attack successful', attackValue, defenderDice[defenderDieIndex]);
       attackSuccess = true;
-      game.scores[currentPlayerIndex] += defenderDice[defenderDieIndex].size;
-      // Capture the die
-      defenderDice.splice(defenderDieIndex, 1);
-      // Re-roll attacker die
-      attackerDice[attackerDieIndices[0]] = rollDie(attackerDie.size);
-    } else {
-      // TODO: Fail attack
     }
   } else {
     // Skill attack
-    const attackValue = attackerDieIndices.reduce((acc, index) => acc + attackerDice[index].value, 0);
     if (attackValue === defenderDice[defenderDieIndex].value) {
       console.log('Skill attack successful', attackValue, defenderDice[defenderDieIndex]);
       attackSuccess = true;
-      game.scores[currentPlayerIndex] += defenderDice[defenderDieIndex].size;
-      // Capture the die
-      defenderDice.splice(defenderDieIndex, 1);
-      // Re-roll attacker dice
-      attackerDieIndices.forEach(index => {
-        attackerDice[index] = rollDie(attackerDice[index].size);
-      });
-    } else {
-      // TODO: Fail attack
     }
+  }
+
+  if (attackSuccess) {
+    // Capture the die
+    game.scores[currentPlayerIndex] += defenderDice[defenderDieIndex].size;
+    defenderDice.splice(defenderDieIndex, 1);
+    // Re-roll attacker dice
+    attackerDieIndices.forEach(index => {
+      attackerDice[index] = rollDie(attackerDice[index].size);
+    });
+  } else {
+    // TODO: Fail attack
   }
 
   // Check win condition
