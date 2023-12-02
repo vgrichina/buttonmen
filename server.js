@@ -60,6 +60,8 @@ const performAttack = (gameId, playerId, attackerDieIndices, defenderDieIndex) =
     attackerDieIndices.forEach(index => {
       attackerDice[index] = rollDie(attackerDice[index].size);
     });
+    // Switch to the next player
+    game.currentPlayer = game.currentPlayer % 2 + 1;
   } else {
     // TODO: Fail attack
   }
@@ -67,11 +69,6 @@ const performAttack = (gameId, playerId, attackerDieIndices, defenderDieIndex) =
   // Check win condition
   if (defenderDice.length === 0) {
     return { message: `${currentPlayer} wins with a score of ${game.scores[currentPlayerIndex]}` };
-  }
-
-  // If attack successful, switch players
-  if (attackSuccess) {
-    game.currentPlayer = game.currentPlayer % 2 + 1;
   }
 
   return { message: attackSuccess ? 'Attack successful' : 'Attack failed', game };
