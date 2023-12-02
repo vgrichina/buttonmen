@@ -117,7 +117,8 @@ const App = () => {
         );
       })}
       <h4>Captured</h4>
-      {captured.length > 0 ? captured.map((die) => `D${die}`).join(', ') : 'None'}
+      <p>{captured.length > 0 ? captured.map((die) => `D${die}`).join(', ') : 'None'}</p>
+      <p>Score: {captured.reduce((a, b) => a + b, 0)}</p>
     </div>
   );
 
