@@ -139,9 +139,8 @@ const App = () => {
         gameState &&
         <>
           <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
-          {gameState && renderDice(gameState.dice[0], gameState.players[0], gameState.currentPlayer === 2, gameState.captured[0])}
-          {gameState && renderDice(gameState.dice[1], gameState.players[1], gameState.currentPlayer === 1, gameState.captured[1])}
-          <button onClick={performAttack} disabled={gameState && gameState.players[gameState.currentPlayer - 1] !== playerId}>Attack</button>
+          {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.currentPlayer != i, gameState.captured[i]))}
+          <button onClick={performAttack} disabled={gameState && gameState.players[gameState.currentPlayer] !== playerId}>Attack</button>
         </>
       )}
     </div>
