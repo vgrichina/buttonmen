@@ -98,18 +98,19 @@ const App = () => {
     setSelectedDefenderDie(null);
   };
 
-  const renderDice = (playerDice, playerId, isDefender, captured) => (
+  const renderDice = (playerDice, dicePlayerId, isActive, captured) => (
     <div>
-      <h3>{playerId}</h3>
+      <h3>{dicePlayerId} {dicePlayerId == playerId && '(You)'}</h3>
+      { isActive && dicePlayerId == playerId && <p>It's your turn</p> }
       <h4>Dice</h4>
       {playerDice.map((die, index) => {
-        const isSelected = isDefender
+        const isSelected = !isActive 
           ? index === selectedDefenderDie
           : selectedDice.includes(index);
         return (
           <button
             key={index}
-            onClick={() => isDefender ? selectDefenderDieForAttack(index) : selectDieForAttack(index)}
+            onClick={() => !isActive ? selectDefenderDieForAttack(index) : selectDieForAttack(index)}
             style={{ backgroundColor: isSelected ? 'yellow' : 'white' }}
           >
             <Dice value={die.value} size={die.size} />
@@ -140,7 +141,7 @@ const App = () => {
         gameState &&
         <>
           <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
-          {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.currentPlayer != i, gameState.captured[i]))}
+          {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.currentPlayer == i, gameState.captured[i]))}
           <button onClick={performAttack} disabled={gameState && gameState.players[gameState.currentPlayer] !== playerId}>Attack</button>
         </>
       )}
