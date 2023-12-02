@@ -5,11 +5,14 @@ const createGame = (playerId) => {
   games[newGameId] = {
     players: [playerId, null],
     currentPlayer: 1,
-    scores: [0, 0],
     dice: [
       [4, 6, 8, 10, 20].map(rollDie), // TODO: Roll dice according to character sheet
       [],
     ],
+    captured: [
+      [],
+      [],
+    ]
   };
   return newGameId;
 };
@@ -54,7 +57,7 @@ const performAttack = (gameId, playerId, attackerDieIndices, defenderDieIndex) =
 
   if (attackSuccess) {
     // Capture the die
-    game.scores[currentPlayerIndex] += defenderDice[defenderDieIndex].size;
+    game.captured[currentPlayerIndex].push(defenderDice[defenderDieIndex].size);
     defenderDice.splice(defenderDieIndex, 1);
     // Re-roll attacker dice
     attackerDieIndices.forEach(index => {
@@ -68,7 +71,7 @@ const performAttack = (gameId, playerId, attackerDieIndices, defenderDieIndex) =
 
   // Check win condition
   if (defenderDice.length === 0) {
-    return { message: `${currentPlayer} wins with a score of ${game.scores[currentPlayerIndex]}` };
+    // TODO: End game
   }
 
   return { message: attackSuccess ? 'Attack successful' : 'Attack failed', game };

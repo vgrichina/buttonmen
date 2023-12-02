@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 // The Dice component
 const Dice = ({ value, size }) => (
   <div>
-    {size}-sided: {value}
+    D{size}: {value}
   </div>
 );
 
@@ -98,14 +98,14 @@ const App = () => {
     setSelectedDefenderDie(null);
   };
 
-  const renderDice = (playerDice, playerId, isDefender) => (
+  const renderDice = (playerDice, playerId, isDefender, captured) => (
     <div>
-      <h3>Player {playerId}'s Dice:</h3>
+      <h3>{playerId}</h3>
+      <h4>Dice</h4>
       {playerDice.map((die, index) => {
         const isSelected = isDefender
           ? index === selectedDefenderDie
           : selectedDice.includes(index);
-
         return (
           <button
             key={index}
@@ -116,6 +116,8 @@ const App = () => {
           </button>
         );
       })}
+      <h4>Captured</h4>
+      {captured.length > 0 ? captured.map((die) => `D${die}`).join(', ') : 'None'}
     </div>
   );
 
@@ -137,8 +139,8 @@ const App = () => {
         gameState &&
         <>
           <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
-          {gameState && renderDice(gameState.dice[0], gameState.players[0], gameState.currentPlayer === 2)}
-          {gameState && renderDice(gameState.dice[1], gameState.players[1], gameState.currentPlayer === 1)}
+          {gameState && renderDice(gameState.dice[0], gameState.players[0], gameState.currentPlayer === 2, gameState.captured[0])}
+          {gameState && renderDice(gameState.dice[1], gameState.players[1], gameState.currentPlayer === 1, gameState.captured[1])}
           <button onClick={performAttack} disabled={gameState && gameState.players[gameState.currentPlayer - 1] !== playerId}>Attack</button>
         </>
       )}
