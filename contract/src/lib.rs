@@ -25,7 +25,7 @@ impl Contract {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Web4Request {
     #[serde(rename = "accountId")]
