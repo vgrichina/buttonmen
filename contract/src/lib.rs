@@ -37,23 +37,28 @@ impl Contract {
             return self.serve_static("/index.html");
         }
 
-        // check path starts with /games/
-        if request.path.starts_with("/games") {
-            let parts = request.path.split("/").collect::<Vec<&str>>();
+        if request.path == "/config.js" {
+            return Web4Response::Body {
+                content_type: "application/javascript".to_owned(),
+                body: format!("window._web4Config = {{ contractName: '{}' }};", env::current_account_id()).as_bytes().to_owned().into(),
+            }
+        }
 
-            // check if game exists
-            if request.path == "/games" {
+        // check path starts with /games/
+        if request.path.starts_with("/api/games") {
+            if request.path == "/api/games" {
                 return Web4Response::Body {
                     content_type: "application/json".to_owned(),
                     body: serde_json::to_vec(&self.latest_games.iter()
                         .map(|game_id| { self.games.get(&game_id.to_string()).unwrap() })
-                        .filter(|game| { game.players.contains(&"".to_string()) })
+                        // TODO: Track games you joined separately
+                        // .filter(|game| { game.players.contains(&"".to_string()) })
                         .collect::<Vec<Game>>()).unwrap().into(),
                 }
             }
 
-            // return game status
-            let game_id = parts[2];
+            let parts = request.path.split("/").collect::<Vec<&str>>();
+            let game_id = parts[3];
 
             match self.games.get(&game_id.to_string()) {
                 Some(game) => {
@@ -494,7 +499,7 @@ mod tests {
     fn web4_get_latest_games_empty() {
         let mut contract = Contract::default();
 
-        let response = contract.web4_get(request_path("/games"));
+        let response = contract.web4_get(request_path("/api/games"));
         assert_eq!(response, Web4Response::Body {
             content_type: "application/json".to_owned(),
             body: "[]".as_bytes().to_owned().into(),
@@ -512,7 +517,7 @@ mod tests {
             .build());
         contract.join_game(game2.clone());
 
-        let response = contract.web4_get(request_path("/games"));
+        let response = contract.web4_get(request_path("/api/games"));
         match response {
             Web4Response::Body { content_type, body } => {
                 assert_eq!(content_type, "application/json".to_owned());

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Cookies from 'js-cookie';
 
 // The Dice component
 const Dice = ({ value, size }) => (
@@ -9,13 +10,19 @@ const Dice = ({ value, size }) => (
 
 // The main App component
 const App = () => {
-  // TODO: Use web4 login
-  if (!localStorage.getItem('playerId')) {
-    localStorage.setItem('playerId', Math.random().toString(36).substring(7));
+  const playerId = Cookies.get('web4_account_id');
+  const contractId = window._web4Config?.contractName;
+
+  if (!playerId) {
+    return (
+      <div className="App">
+        <h1>Login to play</h1>
+        <a href="/web4/login">Login</a>
+      </div>
+    );
   }
 
   const [gameId, setGameId] = useState(null);
-  const [playerId, setPlayerId] = useState(localStorage.getItem('playerId')); // This should be set when a player logs in or is identified
   const [gameState, setGameState] = useState(null);
   const [selectedDice, setSelectedDice] = useState([]); // To store indices of selected dice for an attack
   const [selectedDefenderDie, setSelectedDefenderDie] = useState(null); // Index of selected defender die
@@ -26,7 +33,6 @@ const App = () => {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'X-Player-Id': playerId,
       },
       body: JSON.stringify(body),
     });
@@ -55,20 +61,20 @@ const App = () => {
       return () => clearInterval(interval);
     }
 
-  }, [gameId, playerId]);
+  }, [gameId]);
 
   const createGame = async () => {
-    const data = await post('/api/games');
-    setGameId(data.gameId);
+    const gameId = await post(`/web4/contract/${contractId}/create_game`);
+    setGameId(gameId);
   };
 
   const joinGame = async (gameId) => {
-    await post(`/api/games/${gameId}/join`);
+    await post(`/web4/contract/${contractId}/join_game`, { game_id: gameId });
     setGameId(gameId);
   };
 
   const attack = async (attackerDieIndices, defenderDieIndex) => {
-    await post(`/api/games/${gameId}/attack`, { attackerDieIndices, defenderDieIndex });
+    await post(`/web4/contract/${contractId}/attack`, { game_id: gameId, attacker_die_indices: attackerDieIndices, defender_die_index: defenderDieIndex });
   };
 
   const selectDieForAttack = (index) => {
@@ -104,7 +110,7 @@ const App = () => {
       { isActive && dicePlayerId == playerId && <p>It's your turn</p> }
       <h4>Dice</h4>
       {playerDice.map((die, index) => {
-        const isSelected = !isActive 
+        const isSelected = !isActive
           ? index === selectedDefenderDie
           : selectedDice.includes(index);
         return (
@@ -131,8 +137,12 @@ const App = () => {
           <h2>Open games</h2>
           <ul>
             {openGames.map(game => (
-              <li key={game.gameId}>
-                Game {game.gameId} with {game.players.find(p => !!p) } <button onClick={() => joinGame(game.gameId)}>Join</button>
+              <li key={game.id}>
+                Game {game.id} with {game.players.find(p => !!p) } {
+                  game.players.find(p => p == playerId)
+                    ? <button onClick={() => setGameId(game.id)}>Resume</button>
+                    : <button onClick={() => joinGame(game.id)}>Join</button>
+                }
               </li>
             ))}
           </ul>
@@ -141,8 +151,8 @@ const App = () => {
         gameState &&
         <>
           <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
-          {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.currentPlayer == i, gameState.captured[i]))}
-          <button onClick={performAttack} disabled={gameState && gameState.players[gameState.currentPlayer] !== playerId}>Attack</button>
+          {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.current_player == i, gameState.captured[i]))}
+          <button onClick={performAttack} disabled={gameState && gameState.players[gameState.current_player] !== playerId}>Attack</button>
         </>
       )}
     </div>
