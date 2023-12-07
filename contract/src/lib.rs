@@ -1,9 +1,7 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
-use near_sdk::env;
-use near_sdk::near_bindgen;
+use near_sdk::{env, serde_json, near_bindgen, require};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::serde_json;
 
 use near_rng::Rng;
 
@@ -12,6 +10,7 @@ use near_rng::Rng;
 pub struct Contract {
     pub games: LookupMap<String, Game>,
     pub last_game_id: u64,
+    pub web4_static_url: String,
 }
 
 impl Default for Contract {
@@ -19,6 +18,9 @@ impl Default for Contract {
         Self {
             games: LookupMap::new(b"g".to_vec()),
             last_game_id: 0,
+            // NOTE: This points to web4.near.page static by default
+            // TODO: Point to default deployment of this game frontend
+            web4_static_url: "ipfs://bafkreig74di4midqzggkjfmtfu4c7gei3u6scihgkvig2k4mjrovcjl4ri".to_string(),
         }
     }
 }
@@ -28,10 +30,7 @@ impl Contract {
     /// Learn more about web4 here: https://web4.near.page
     pub fn web4_get(&self, request: Web4Request) -> Web4Response {
         if request.path == "/" {
-            return Web4Response::Body {
-                content_type: "text/html; charset=UTF-8".to_owned(),
-                body: "<h1>Hello from Web4 on NEAR!</h1>".as_bytes().to_owned().into(),
-            }
+            return self.serve_static("/index.html");
         }
 
         // check path starts with /games/
@@ -70,11 +69,12 @@ impl Contract {
             }
         }
 
-        // return 404
-        // TODO: Support HTTP error codes in boilerplate
-        Web4Response::Body {
-            content_type: "text/html; charset=UTF-8".to_owned(),
-            body: "<h1>404 Not Found</h1>".as_bytes().to_owned().into(),
+        return self.serve_static(request.path.as_str());
+    }
+
+    fn serve_static(&self, path: &str) -> Web4Response {
+        Web4Response::BodyUrl {
+            body_url: format!("{}{}", self.web4_static_url, path),
         }
     }
 
@@ -179,6 +179,14 @@ impl Contract {
             }
         }
     }
+
+    // TODO: Move this to a separate trait together with serve_static
+    pub fn web4_setStaticUrl(&mut self, url: String) -> () {
+        // TODO: Allow to set owner like in https://github.com/near/near-sdk-rs/blob/00226858199419aaa8c99f756bd192851666fb36/near-contract-standards/src/upgrade/mod.rs#L7
+        require!(env::predecessor_account_id() == env::current_account_id(), "Only owner can set static URL");
+
+        self.web4_static_url = url;
+    }
 }
 
 fn roll_die(rng: &mut Rng, size: u8) -> Die {
@@ -205,7 +213,7 @@ pub struct Web4Request {
     pub preloads: Option<std::collections::HashMap<String, Web4Response>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(crate = "near_sdk::serde", untagged)]
 pub enum Web4Response {
     Body {
@@ -433,5 +441,39 @@ mod tests {
         // NOTE: The attacker's die is re-rolled. It's deterministic in tests
         assert_eq!(game.dice, vec![vec![Die { size: 4, value: 4 }], vec![Die { size: 4, value: 2 }]]);
         assert_eq!(game.captured, vec![vec![], vec![6]]);
+    }
+
+    #[test]
+    fn web4_get_serve_index() {
+        let contract = Contract::default();
+        let request = Web4Request {
+            account_id: None,
+            path: "/".to_string(),
+            params: std::collections::HashMap::new(),
+            query: std::collections::HashMap::new(),
+            preloads: None,
+        };
+        let response = contract.web4_get(request);
+
+        assert_eq!(response, Web4Response::BodyUrl {
+            body_url: "ipfs://bafkreig74di4midqzggkjfmtfu4c7gei3u6scihgkvig2k4mjrovcjl4ri/index.html".to_string(),
+        });
+    }
+
+    #[test]
+    fn web4_get_serve_static() {
+        let contract = Contract::default();
+        let request = Web4Request {
+            account_id: None,
+            path: "/static/style.css".to_string(),
+            params: std::collections::HashMap::new(),
+            query: std::collections::HashMap::new(),
+            preloads: None,
+        };
+        let response = contract.web4_get(request);
+
+        assert_eq!(response, Web4Response::BodyUrl {
+            body_url: "ipfs://bafkreig74di4midqzggkjfmtfu4c7gei3u6scihgkvig2k4mjrovcjl4ri/static/style.css".to_string(),
+        });
     }
 }
