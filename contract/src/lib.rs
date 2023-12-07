@@ -133,7 +133,7 @@ impl Contract {
 
         match self.games.get(&game_id) {
             Some(mut game) => {
-                let current_player_index = game.players.iter().position(|p| p == &player_id).unwrap();
+                let current_player_index = game.players.iter().position(|p| p == &player_id).unwrap_or_else(|| panic!("Player {} has not joined game {}", player_id, game_id));
                 if game.current_player != current_player_index as u8 {
                     panic!("It is not your turn");
                 }
@@ -170,6 +170,9 @@ impl Contract {
                 if game.dice[defender_dice_idx].len() == 0 {
                     // TODO: End game
                 }
+
+                // Update the game state
+                self.games.insert(&game_id, &game);
             },
             None => {
                 panic!("Game not found: {}", game_id);
@@ -220,7 +223,7 @@ pub enum Web4Response {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Die {
     size: u8,
@@ -239,14 +242,16 @@ pub struct Game {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use near_sdk::testing_env;
+    use near_sdk::test_utils::VMContextBuilder;
 
     #[test]
     fn create_game() {
-        let mut contact = Contract::default();
-        contact.create_game();
+        let mut contract = Contract::default();
+        contract.create_game();
 
-        assert_eq!(contact.last_game_id, 1);
-        let game = contact.games.get(&"1".to_string()).unwrap();
+        assert_eq!(contract.last_game_id, 1);
+        let game = contract.games.get(&"1".to_string()).unwrap();
         assert_eq!(game.players.len(), 2);
         assert_eq!(game.players[0], "bob.near");
         assert_eq!(game.players[1], "");
@@ -257,5 +262,176 @@ mod tests {
         assert_eq!(game.captured.len(), 2);
         assert_eq!(game.captured[0].len(), 0);
         assert_eq!(game.captured[1].len(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Player bob.near has already joined game 1")]
+    fn join_game_same_player() {
+        let mut contract = Contract::default();
+        contract.create_game();
+        contract.join_game("1".to_string());
+    }
+
+    #[test]
+    fn join_game_other_player() {
+        let mut contract = Contract::default();
+        contract.create_game();
+
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("alice.near".parse().unwrap())
+            .build());
+        contract.join_game("1".to_string());
+
+        assert_eq!(contract.last_game_id, 1);
+        let game = contract.games.get(&"1".to_string()).unwrap();
+        assert_eq!(game.players.len(), 2);
+        assert_eq!(game.players[0], "bob.near");
+        assert_eq!(game.players[1], "alice.near");
+        assert_eq!(game.current_player, 0);
+        assert_eq!(game.dice.len(), 2);
+        assert_eq!(game.dice[0].len(), 5);
+        assert_eq!(game.dice[1].len(), 5);
+        assert_eq!(game.captured.len(), 2);
+        assert_eq!(game.captured[0].len(), 0);
+        assert_eq!(game.captured[1].len(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Game is full: 1")]
+    fn join_game_full() {
+        let mut contract = Contract::default();
+        contract.create_game();
+
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("alice.near".parse().unwrap())
+            .build());
+        contract.join_game("1".to_string());
+
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("eve.near".parse().unwrap())
+            .build());
+        contract.join_game("1".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Game not found: 1")]
+    fn join_game_not_found() {
+        let mut contract = Contract::default();
+        contract.join_game("1".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "It is not your turn")]
+    fn attack_not_your_turn() {
+        let mut contract = Contract::default();
+        contract.create_game();
+
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("alice.near".parse().unwrap())
+            .build());
+        contract.join_game("1".to_string());
+        contract.attack("1".to_string(), vec![0], 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Player eve.near has not joined game 1")]
+    fn attack_not_joined() {
+        let mut contract = Contract::default();
+        contract.create_game();
+
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("alice.near".parse().unwrap())
+            .build());
+        contract.join_game("1".to_string());
+
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("eve.near".parse().unwrap())
+            .build());
+        contract.attack("1".to_string(), vec![0], 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Attack failed")]
+    fn attack_failed() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![vec![Die { size: 4, value: 1 }], vec![Die { size: 4, value: 2 }]],
+            captured: vec![vec![], vec![]],
+        });
+
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("bob.near".parse().unwrap())
+            .build());
+        contract.attack("1".to_string(), vec![0], 0);
+    }
+
+    #[test]
+    fn attack_power_success() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![vec![Die { size: 4, value: 4 }, Die { size: 6, value: 1} ], vec![Die { size: 4, value: 2 }]],
+            captured: vec![vec![], vec![]],
+        });
+
+        contract.attack("1".to_string(), vec![0], 0);
+
+        let game = contract.games.get(&"1".to_string()).unwrap();
+        assert_eq!(game.players.len(), 2);
+        assert_eq!(game.players[0], "bob.near");
+        assert_eq!(game.players[1], "alice.near");
+        assert_eq!(game.current_player, 1);
+        // NOTE: The attacker's die is re-rolled. It's deterministic in tests
+        assert_eq!(game.dice, vec![vec![Die { size: 4, value: 2 }, Die { size: 6, value: 1 }], vec![]]);
+        assert_eq!(game.captured, vec![vec![4], vec![]]);
+    }
+
+    #[test]
+    fn attack_skill_success() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![vec![Die { size: 4, value: 2 }, Die { size: 6, value: 4 }], vec![Die { size: 10, value: 6 }]],
+            captured: vec![vec![], vec![]],
+        });
+
+        contract.attack("1".to_string(), vec![0, 1], 0);
+
+        let game = contract.games.get(&"1".to_string()).unwrap();
+        assert_eq!(game.players.len(), 2);
+        assert_eq!(game.players[0], "bob.near");
+        assert_eq!(game.players[1], "alice.near");
+        assert_eq!(game.current_player, 1);
+        assert_eq!(game.dice, vec![vec![Die { size: 4, value: 2 }, Die { size: 6, value: 4 }], vec![]]);
+        assert_eq!(game.captured, vec![vec![10], vec![]]);
+    }
+
+    #[test]
+    fn attack_power_alice() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 1,
+            dice: vec![vec![Die { size: 4, value: 4 }, Die { size: 6, value: 1} ], vec![Die { size: 4, value: 3 }]],
+            captured: vec![vec![], vec![]],
+        });
+
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("alice.near".parse().unwrap())
+            .build());
+        contract.attack("1".to_string(), vec![0], 1);
+
+        let game = contract.games.get(&"1".to_string()).unwrap();
+        assert_eq!(game.players.len(), 2);
+        assert_eq!(game.players[0], "bob.near");
+        assert_eq!(game.players[1], "alice.near");
+        assert_eq!(game.current_player, 0);
+        // NOTE: The attacker's die is re-rolled. It's deterministic in tests
+        assert_eq!(game.dice, vec![vec![Die { size: 4, value: 4 }], vec![Die { size: 4, value: 2 }]]);
+        assert_eq!(game.captured, vec![vec![], vec![6]]);
     }
 }
