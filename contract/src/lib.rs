@@ -5,11 +5,14 @@ use near_sdk::serde::{Deserialize, Serialize};
 
 use near_rng::Rng;
 
+const MAX_LATEST_GAMES: usize = 10;
+
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct Contract {
     pub games: LookupMap<String, Game>,
     pub last_game_id: u64,
+    pub latest_games: Vec<String>,
     pub web4_static_url: String,
 }
 
@@ -18,6 +21,7 @@ impl Default for Contract {
         Self {
             games: LookupMap::new(b"g".to_vec()),
             last_game_id: 0,
+            latest_games: vec![],
             // NOTE: This points to web4.near.page static by default
             // TODO: Point to default deployment of this game frontend
             web4_static_url: "ipfs://bafkreig74di4midqzggkjfmtfu4c7gei3u6scihgkvig2k4mjrovcjl4ri".to_string(),
@@ -39,11 +43,12 @@ impl Contract {
 
             // check if game exists
             if request.path == "/games" {
-                // return list of games
-                // TODO: return list of games
                 return Web4Response::Body {
                     content_type: "application/json".to_owned(),
-                    body: serde_json::to_vec(&vec!["game_1", "game_2"]).unwrap().into(),
+                    body: serde_json::to_vec(&self.latest_games.iter()
+                        .map(|game_id| { self.games.get(&game_id.to_string()).unwrap() })
+                        .filter(|game| { game.players.contains(&"".to_string()) })
+                        .collect::<Vec<Game>>()).unwrap().into(),
                 }
             }
 
@@ -85,6 +90,7 @@ impl Contract {
 
         let mut rng = Rng::new(&env::random_seed());
         let game = Game {
+            id: game_id.clone(),
             players: vec![player_id.to_string(), "".to_string()],
             current_player: 0,
             // TODO: Roll dice according to character sheet
@@ -93,6 +99,10 @@ impl Contract {
         };
 
         self.games.insert(&game_id, &game);
+        self.latest_games.push(game_id.clone());
+        if self.latest_games.len() > MAX_LATEST_GAMES {
+            self.latest_games.remove(0);
+        }
         return game_id;
     }
 
@@ -241,6 +251,7 @@ pub struct Die {
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Game {
+    id: String,
     players: Vec<String>,
     current_player: u8,
     dice: Vec<Vec<Die>>,
@@ -260,6 +271,7 @@ mod tests {
 
         assert_eq!(contract.last_game_id, 1);
         let game = contract.games.get(&"1".to_string()).unwrap();
+        assert_eq!(game.id, "1");
         assert_eq!(game.players.len(), 2);
         assert_eq!(game.players[0], "bob.near");
         assert_eq!(game.players[1], "");
@@ -270,6 +282,7 @@ mod tests {
         assert_eq!(game.captured.len(), 2);
         assert_eq!(game.captured[0].len(), 0);
         assert_eq!(game.captured[1].len(), 0);
+        assert_eq!(contract.latest_games, vec!["1".to_string()]);
     }
 
     #[test]
@@ -363,6 +376,7 @@ mod tests {
     fn attack_failed() {
         let mut contract = Contract::default();
         contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
             dice: vec![vec![Die { size: 4, value: 1 }], vec![Die { size: 4, value: 2 }]],
@@ -379,6 +393,7 @@ mod tests {
     fn attack_power_success() {
         let mut contract = Contract::default();
         contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
             dice: vec![vec![Die { size: 4, value: 4 }, Die { size: 6, value: 1} ], vec![Die { size: 4, value: 2 }]],
@@ -401,6 +416,7 @@ mod tests {
     fn attack_skill_success() {
         let mut contract = Contract::default();
         contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
             dice: vec![vec![Die { size: 4, value: 2 }, Die { size: 6, value: 4 }], vec![Die { size: 10, value: 6 }]],
@@ -422,6 +438,7 @@ mod tests {
     fn attack_power_alice() {
         let mut contract = Contract::default();
         contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 1,
             dice: vec![vec![Die { size: 4, value: 4 }, Die { size: 6, value: 1} ], vec![Die { size: 4, value: 3 }]],
@@ -443,17 +460,20 @@ mod tests {
         assert_eq!(game.captured, vec![vec![], vec![6]]);
     }
 
-    #[test]
-    fn web4_get_serve_index() {
-        let contract = Contract::default();
-        let request = Web4Request {
+    fn request_path(path: &str) -> Web4Request {
+        Web4Request {
             account_id: None,
-            path: "/".to_string(),
+            path: path.to_string(),
             params: std::collections::HashMap::new(),
             query: std::collections::HashMap::new(),
             preloads: None,
-        };
-        let response = contract.web4_get(request);
+        }
+    }
+
+    #[test]
+    fn web4_get_serve_index() {
+        let contract = Contract::default();
+        let response = contract.web4_get(request_path("/"));
 
         assert_eq!(response, Web4Response::BodyUrl {
             body_url: "ipfs://bafkreig74di4midqzggkjfmtfu4c7gei3u6scihgkvig2k4mjrovcjl4ri/index.html".to_string(),
@@ -463,17 +483,42 @@ mod tests {
     #[test]
     fn web4_get_serve_static() {
         let contract = Contract::default();
-        let request = Web4Request {
-            account_id: None,
-            path: "/static/style.css".to_string(),
-            params: std::collections::HashMap::new(),
-            query: std::collections::HashMap::new(),
-            preloads: None,
-        };
-        let response = contract.web4_get(request);
+        let response = contract.web4_get(request_path("/static/style.css"));
 
         assert_eq!(response, Web4Response::BodyUrl {
             body_url: "ipfs://bafkreig74di4midqzggkjfmtfu4c7gei3u6scihgkvig2k4mjrovcjl4ri/static/style.css".to_string(),
         });
+    }
+
+    #[test]
+    fn web4_get_latest_games_empty() {
+        let mut contract = Contract::default();
+
+        let response = contract.web4_get(request_path("/games"));
+        assert_eq!(response, Web4Response::Body {
+            content_type: "application/json".to_owned(),
+            body: "[]".as_bytes().to_owned().into(),
+        });
+    }
+
+    #[test]
+    fn web4_get_latest_games_skip_full() {
+        let mut contract = Contract::default();
+        let game1 = contract.create_game();
+        let game2 = contract.create_game();
+
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("alice.near".parse().unwrap())
+            .build());
+        contract.join_game(game2.clone());
+
+        let response = contract.web4_get(request_path("/games"));
+        match response {
+            Web4Response::Body { content_type, body } => {
+                assert_eq!(content_type, "application/json".to_owned());
+                assert_eq!(String::from_utf8(body.into()).unwrap(), serde_json::to_string(&vec![contract.games.get(&game1).unwrap()]).unwrap());
+            },
+            _ => panic!("Unexpected response"),
+        }
     }
 }
