@@ -65,12 +65,12 @@ const usePolling = (deps, url, intervalMs = 2000) => {
 };
 
 
-const OpenGamesList = () => {
+const LatestGamesList = () => {
   const openGames = usePolling([], '/api/games');
 
   return (
     <div>
-      <h2>Open games</h2>
+      <h2>Latest games created</h2>
       <GameList games={openGames} />
     </div>
   );
@@ -198,7 +198,7 @@ const App = () => {
     return <>
       <LoggedInBanner />
       <button onClick={createGame}>Create Game</button>
-      <OpenGamesList />
+      <LatestGamesList />
 
       <AwaitingTurnGamesList />
     </>
