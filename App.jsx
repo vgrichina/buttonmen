@@ -29,8 +29,9 @@ const joinGame = async (gameId) => {
   window.location.href = `/games/${gameId}`;
 };
 
-const GameList = ({ games }) => (
-  <ul>
+const GameList = ({ games }) => (!games
+  ? <div>Loading...</div>
+  : <ul>
     {games.map(game => (
       <li key={game.id}>
         Game {game.id}: {game.players[0]} vs {game.players[1] || '???'} {
@@ -45,17 +46,27 @@ const GameList = ({ games }) => (
   </ul>
 );
 
-const OpenGamesList = () => {
-  const [openGames, setOpenGames] = useState([]);
+const usePolling = (deps, url, intervalMs = 2000) => {
+  const [data, setData] = useState(null);
 
   useEffect(() => {
-    const interval = setInterval(async () => {
-      const games = await get('/api/games');
-      setOpenGames(games);
-    }, 2000);
+    const load = async () => {
+      const data = await get(url);
+      setData(data);
+    }
 
+    load();
+
+    const interval = setInterval(load, intervalMs);
     return () => clearInterval(interval);
-  }, []);
+  }, [...deps, url, intervalMs]);
+
+  return data;
+};
+
+
+const OpenGamesList = () => {
+  const openGames = usePolling([], '/api/games');
 
   return (
     <div>
@@ -66,43 +77,25 @@ const OpenGamesList = () => {
 };
 
 const AwaitingTurnGamesList = ({ gameId }) => {
-  const [games, setGames] = useState([]);
+  const games = usePolling([playerId], `/api/users/${playerId}/games`);
 
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const games = await get(`/api/users/${playerId}/games`);
-      setGames(games.filter(game => game.id !== gameId && game.current_player === game.players.indexOf(playerId)));
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  if (games.length === 0) {
+  if (!games?.length) {
     return null;
   }
 
   return (
     <div>
       <h2>Awaiting your turn</h2>
-      <GameList games={games} />
+      <GameList games={games.filter(game => game.id !== gameId && game.current_player == game.players.indexOf(playerId))} />
     </div>
   );
 };
 
 const Game = ({ gameId }) => {
-  const [gameState, setGameState] = useState(null);
   const [selectedDice, setSelectedDice] = useState([]); // To store indices of selected dice for an attack
   const [selectedDefenderDie, setSelectedDefenderDie] = useState(null); // Index of selected defender die
 
-  // Fetch game status
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const status = await get(`/api/games/${gameId}/status`);
-      setGameState(status);
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [gameId]);
+  const gameState = usePolling([gameId], `/api/games/${gameId}/status`);
 
   const attack = async (attackerDieIndices, defenderDieIndex) => {
     await post(`/web4/contract/${contractId}/attack`, { game_id: gameId, attacker_die_indices: attackerDieIndices, defender_die_index: defenderDieIndex });
