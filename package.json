@@ -7,6 +7,9 @@
   "scripts": {
     "prestart": "bun run build",
     "start": "bun --watch server.js",
-    "build": "bun build ./index.jsx --outdir ./dist && cp -R ./public/* ./dist"
+    "build": "bun build ./index.jsx --outdir ./dist && cp -R ./public/* ./dist",
+    "build:watch": "bun build ./index.jsx --outdir ./dist --watch",
+    "build:contract": "cd contract && cargo build --target wasm32-unknown-unknown --release",
+    "deploy:prod" : "NODE_ENV=mainnet npx web4-deploy dist buttonmen.near --deploy-contract contract/target/wasm32-unknown-unknown/release/web4_demo.wasm"
   }
 }
