@@ -145,7 +145,7 @@ impl Contract {
         let game = Game {
             id: game_id.clone(),
             players: vec![player_id.to_string(), "".to_string()],
-            current_player: 0,
+            current_player: 0xFF,
             // TODO: Roll dice according to character sheet
             dice: vec![roll_dice(&mut rng, vec![4, 6, 8, 10, 20]), vec![]],
             captured: vec![vec![], vec![]],
@@ -178,7 +178,28 @@ impl Contract {
                         // Assign the player to the game
                         game.players[player_index] = player_id.to_string();
                         // TODO: Roll dice according to character sheet
-                        game.dice[player_index] = roll_dice(&mut Rng::new(&env::random_seed()), vec![4, 6, 8, 10, 20]);
+                        let mut rng = Rng::new(&env::random_seed());
+                        game.dice[player_index] = roll_dice(&mut rng, vec![4, 6, 8, 10, 20]);
+
+                        // Sorted dice from lowest to highest for every player
+                        let sorted_dice = game.dice.iter().cloned().map(|mut dice| {
+                            dice.sort_by(|a, b| a.value.cmp(&b.value));
+                            dice
+                        }).collect::<Vec<Vec<Die>>>();
+
+                        // Whoever rolled the single lowest number will go first.
+                        // If the lowest dice are tied, compare the next lowest dice,
+                        // and so on until a starting player is determined.
+                        // TODO: If all numbers are tied, the round is a draw.
+                        game.current_player = 0;
+                        'outer: for i in 0..sorted_dice[0].len() {
+                            for player in 0..sorted_dice.len() {
+                                if sorted_dice[player][i].value < sorted_dice[game.current_player as usize][i].value {
+                                    game.current_player = player as u8;
+                                    break 'outer;
+                                }
+                            }
+                        }
 
                         // Update the game state
                         self.games.insert(&game_id, &game);
@@ -299,7 +320,7 @@ pub enum Web4Response {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Die {
     size: u8,
@@ -337,7 +358,7 @@ mod tests {
         let game = contract.games.get(&"1".to_string()).unwrap();
         assert_eq!(game.id, "1");
         assert_eq!(game.players, vec!["bob.near".to_string(), "".to_string()]);
-        assert_eq!(game.current_player, 0);
+        assert_eq!(game.current_player, 0xff);
         assert_eq!(game.dice.len(), 2);
         assert_eq!(game.dice[0].len(), 5);
         assert_eq!(game.dice[1].len(), 0);
@@ -360,19 +381,27 @@ mod tests {
         let mut contract = Contract::default();
         contract.create_game();
 
-        login_as("alice.near");
+        testing_env!(VMContextBuilder::new()
+            // 32 bytes of random seed
+            // used just so that current_player is not 0 because of the same roll
+            .random_seed([
+                1, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0
+            ])
+            .predecessor_account_id("alice.near".parse().unwrap())
+            .build());
         contract.join_game("1".to_string());
 
         assert_eq!(contract.last_game_id, 1);
         let game = contract.games.get(&"1".to_string()).unwrap();
         assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
-        assert_eq!(game.current_player, 0);
-        assert_eq!(game.dice.len(), 2);
-        assert_eq!(game.dice[0].len(), 5);
-        assert_eq!(game.dice[1].len(), 5);
-        assert_eq!(game.captured.len(), 2);
-        assert_eq!(game.captured[0].len(), 0);
-        assert_eq!(game.captured[1].len(), 0);
+        assert_eq!(game.current_player, 1);
+        assert_eq!(game.dice, vec![
+            vec![Die { size: 4, value: 2 }, Die { size: 6, value: 4 }, Die { size: 8, value: 5 }, Die { size: 10, value: 5}, Die { size: 20, value: 5 }],
+            vec![Die { size: 4, value: 2 }, Die { size: 6, value: 3 }, Die { size: 8, value: 2 }, Die { size: 10, value: 1 }, Die { size: 20, value: 5 }]]);
+        assert_eq!(game.captured, vec![vec![], vec![]] as Vec<Vec<u8>>);
     }
 
     #[test]
