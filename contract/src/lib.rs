@@ -29,6 +29,28 @@ impl Default for Contract {
     }
 }
 
+fn user_games_key(player_id: String) -> Vec<u8> {
+    format!("ug:{}", player_id).as_bytes().to_vec()
+}
+
+fn get_user_games(player_id: String) -> Vec<String> {
+    match env::storage_read(&user_games_key(player_id)) {
+        Some(user_games_vec) => {
+            let user_games_str = String::from_utf8(user_games_vec).unwrap();
+            user_games_str.split(",").map(|s| s.to_string()).collect::<Vec<String>>()
+        },
+        None => vec![],
+    }
+}
+
+fn add_user_game(player_id: String, game_id: String) -> () {
+    let mut user_games_ids = get_user_games(player_id.to_string());
+    user_games_ids.push(game_id);
+    env::storage_write(&user_games_key(player_id), &user_games_ids.join(",").as_bytes());
+
+    // TODO: Limit the number of games per user
+}
+
 #[near_bindgen]
 impl Contract {
     /// Learn more about web4 here: https://web4.near.page
@@ -79,6 +101,34 @@ impl Contract {
             }
         }
 
+        if request.path.starts_with("/api/user") {
+            // handle /api/user/user_id/games
+            let parts = request.path.split("/").collect::<Vec<&str>>();
+            let user_id = parts[3];
+
+            if parts.len() == 5 && parts[4] == "games" {
+                let user_games_ids = match env::storage_read(format!("ug:{}", user_id).as_bytes()) {
+                    Some(user_games_vec) => {
+                        let user_games_str = String::from_utf8(user_games_vec).unwrap();
+                        user_games_str.split(",").map(|s| s.to_string()).collect::<Vec<String>>()
+                    },
+                    None => vec![],
+                };
+                println!("user_games_ids: {:?}", user_games_ids);
+
+                return Web4Response::Body {
+                    content_type: "application/json".to_owned(),
+                    // return game as JSON
+                    body: serde_json::to_vec(&user_games_ids.iter()
+                        .map(|game_id| { self.games.get(&game_id.to_string()).unwrap() })
+                        .collect::<Vec<Game>>()).unwrap().into(),
+                }
+            }
+
+            // TODO: return 404?
+        }
+
+
         return self.serve_static(request.path.as_str());
     }
 
@@ -108,6 +158,9 @@ impl Contract {
         if self.latest_games.len() > MAX_LATEST_GAMES {
             self.latest_games.remove(0);
         }
+
+        add_user_game(player_id.to_string(), game_id.clone());
+
         return game_id;
     }
 
@@ -131,6 +184,8 @@ impl Contract {
 
                         // Update the game state
                         self.games.insert(&game_id, &game);
+
+                        add_user_game(player_id.to_string(), game_id.clone());
                     },
                     None => {
                         panic!("Game is full: {}", game_id);
@@ -522,6 +577,51 @@ mod tests {
             Web4Response::Body { content_type, body } => {
                 assert_eq!(content_type, "application/json".to_owned());
                 assert_eq!(String::from_utf8(body.into()).unwrap(), serde_json::to_string(&vec![contract.games.get(&game1).unwrap()]).unwrap());
+            },
+            _ => panic!("Unexpected response"),
+        }
+    }
+
+    #[test]
+    fn web4_get_your_games_empty() {
+        let mut contract = Contract::default();
+
+        let response = contract.web4_get(request_path("/api/user/bob.near/games"));
+        assert_eq!(response, Web4Response::Body {
+            content_type: "application/json".to_owned(),
+            body: "[]".as_bytes().to_owned().into(),
+        });
+    }
+
+    #[test]
+    fn web4_get_your_games() {
+        let mut contract = Contract::default();
+        let game1 = contract.create_game();
+        let game2 = contract.create_game();
+
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("alice.near".parse().unwrap())
+            .build());
+        contract.join_game(game2.clone());
+
+        match contract.web4_get(request_path("/api/user/alice.near/games")) {
+            Web4Response::Body { content_type, body } => {
+                assert_eq!(content_type, "application/json".to_owned());
+                assert_eq!(String::from_utf8(body.into()).unwrap(),
+                    serde_json::to_string(&vec![
+                        contract.games.get(&game2).unwrap()]).unwrap());
+            },
+            _ => panic!("Unexpected response"),
+        }
+
+        match contract.web4_get(request_path("/api/user/bob.near/games")) {
+            Web4Response::Body { content_type, body } => {
+                assert_eq!(content_type, "application/json".to_owned());
+                assert_eq!(String::from_utf8(body.into()).unwrap(),
+                    serde_json::to_string(&vec![
+                        contract.games.get(&game1).unwrap(),
+                        contract.games.get(&game2).unwrap(),
+                    ]).unwrap());
             },
             _ => panic!("Unexpected response"),
         }

@@ -24,6 +24,25 @@ const Dice = ({ value, size }) => (
   </div>
 );
 
+const joinGame = async (gameId) => {
+  await post(`/web4/contract/${contractId}/join_game`, { game_id: gameId });
+  window.location.href = `/games/${gameId}`;
+};
+
+const GameList = ({ games }) => (
+  <ul>
+    {games.map(game => (
+      <li key={game.id}>
+        Game {game.id} with {game.players.find(p => !!p) } {
+          game.players.find(p => p == playerId)
+            ? <a href={`/games/${game.id}`}>Resume</a>
+            : <button onClick={() => joinGame(game.id)}>Join</button>
+        }
+      </li>
+    ))}
+  </ul>
+);
+
 const OpenGamesList = () => {
   const [openGames, setOpenGames] = useState([]);
 
@@ -34,28 +53,32 @@ const OpenGamesList = () => {
     }, 2000);
 
     return () => clearInterval(interval);
-  }
-  , []);
-
-  const joinGame = async (gameId) => {
-    await post(`/web4/contract/${contractId}/join_game`, { game_id: gameId });
-    window.location.href = `/games/${gameId}`;
-  };
+  }, []);
 
   return (
     <div>
       <h2>Open games</h2>
-      <ul>
-        {openGames.map(game => (
-          <li key={game.id}>
-            Game {game.id} with {game.players.find(p => !!p) } {
-              game.players.find(p => p == playerId)
-                ? <a href={`/games/${game.id}`}>Resume</a>
-                : <button onClick={() => joinGame(game.id)}>Join</button>
-            }
-          </li>
-        ))}
-      </ul>
+      <GameList games={openGames} />
+    </div>
+  );
+};
+
+const AwaitingTurnGamesList = () => {
+  const [games, setGames] = useState([]);
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const games = await get(`/api/user/${playerId}/games`);
+      setGames(games.filter(game => game.current_player === game.players.indexOf(playerId)));
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div>
+      <h2>Awaiting your turn</h2>
+      <GameList games={games} />
     </div>
   );
 };
@@ -140,6 +163,8 @@ const Game = ({ gameId }) => {
       <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
       {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.current_player == i, gameState.captured[i]))}
       <button onClick={performAttack} disabled={gameState && gameState.players[gameState.current_player] !== playerId}>Attack</button>
+
+      <AwaitingTurnGamesList />
     </div>
   );
 };
