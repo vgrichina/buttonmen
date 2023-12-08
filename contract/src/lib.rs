@@ -336,9 +336,7 @@ mod tests {
         assert_eq!(contract.last_game_id, 1);
         let game = contract.games.get(&"1".to_string()).unwrap();
         assert_eq!(game.id, "1");
-        assert_eq!(game.players.len(), 2);
-        assert_eq!(game.players[0], "bob.near");
-        assert_eq!(game.players[1], "");
+        assert_eq!(game.players, vec!["bob.near".to_string(), "".to_string()]);
         assert_eq!(game.current_player, 0);
         assert_eq!(game.dice.len(), 2);
         assert_eq!(game.dice[0].len(), 5);
@@ -367,9 +365,7 @@ mod tests {
 
         assert_eq!(contract.last_game_id, 1);
         let game = contract.games.get(&"1".to_string()).unwrap();
-        assert_eq!(game.players.len(), 2);
-        assert_eq!(game.players[0], "bob.near");
-        assert_eq!(game.players[1], "alice.near");
+        assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
         assert_eq!(game.current_player, 0);
         assert_eq!(game.dice.len(), 2);
         assert_eq!(game.dice[0].len(), 5);
@@ -461,9 +457,7 @@ mod tests {
         contract.attack("1".to_string(), vec![0], 0);
 
         let game = contract.games.get(&"1".to_string()).unwrap();
-        assert_eq!(game.players.len(), 2);
-        assert_eq!(game.players[0], "bob.near");
-        assert_eq!(game.players[1], "alice.near");
+        assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
         assert_eq!(game.current_player, 1);
         // NOTE: The attacker's die is re-rolled. It's deterministic in tests
         assert_eq!(game.dice, vec![vec![Die { size: 4, value: 2 }, Die { size: 6, value: 1 }], vec![]]);
@@ -484,9 +478,7 @@ mod tests {
         contract.attack("1".to_string(), vec![0, 1], 0);
 
         let game = contract.games.get(&"1".to_string()).unwrap();
-        assert_eq!(game.players.len(), 2);
-        assert_eq!(game.players[0], "bob.near");
-        assert_eq!(game.players[1], "alice.near");
+        assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
         assert_eq!(game.current_player, 1);
         assert_eq!(game.dice, vec![vec![Die { size: 4, value: 2 }, Die { size: 6, value: 4 }], vec![]]);
         assert_eq!(game.captured, vec![vec![10], vec![]]);
@@ -509,9 +501,7 @@ mod tests {
         contract.attack("1".to_string(), vec![0], 1);
 
         let game = contract.games.get(&"1".to_string()).unwrap();
-        assert_eq!(game.players.len(), 2);
-        assert_eq!(game.players[0], "bob.near");
-        assert_eq!(game.players[1], "alice.near");
+        assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
         assert_eq!(game.current_player, 0);
         // NOTE: The attacker's die is re-rolled. It's deterministic in tests
         assert_eq!(game.dice, vec![vec![Die { size: 4, value: 4 }], vec![Die { size: 4, value: 2 }]]);
