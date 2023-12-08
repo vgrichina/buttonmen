@@ -78,15 +78,16 @@ const OpenGamesList = () => {
 
 const AwaitingTurnGamesList = ({ gameId }) => {
   const games = usePolling([playerId], `/api/users/${playerId}/games`);
+  const filteredGames = games?.filter(game => game.id !== gameId && game.current_player == game.players.indexOf(playerId));
 
-  if (!games?.length) {
+  if (!filteredGames?.length) {
     return null;
   }
 
   return (
     <div>
       <h2>Awaiting your turn</h2>
-      <GameList games={games.filter(game => game.id !== gameId && game.current_player == game.players.indexOf(playerId))} />
+      <GameList games={filteredGames} />
     </div>
   );
 };
@@ -198,6 +199,8 @@ const App = () => {
       <LoggedInBanner />
       <button onClick={createGame}>Create Game</button>
       <OpenGamesList />
+
+      <AwaitingTurnGamesList />
     </>
   }
 
