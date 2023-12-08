@@ -1,12 +1,12 @@
 {
-    "dependencies": {
-        "js-cookie": "^3.0.5",
-        "react": "^18.2.0",
-        "react-dom": "^18.2.0"
-    },
-    "scripts": {
-        "prestart": "bun run build",
-        "start": "bun --watch server.js",
-        "build": "bun build ./index.jsx --outdir ./dist && cp -R ./public/* ./dist"
-    }
+  "dependencies": {
+    "js-cookie": "^3.0.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "scripts": {
+    "prestart": "bun run build",
+    "start": "bun --watch server.js",
+    "build": "bun build ./index.jsx --outdir ./dist && cp -R ./public/* ./dist"
+  }
 }

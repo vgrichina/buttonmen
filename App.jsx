@@ -1,77 +1,79 @@
 import React, { useState, useEffect } from 'react';
 import Cookies from 'js-cookie';
 
-// The Dice component
+const apiRequest = async (url, method, body) => {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  return response.json();
+};
+
+const get = async (url) => apiRequest(url, 'GET');
+const post = async (url, body) => apiRequest(url, 'POST', body);
+
+const playerId = Cookies.get('web4_account_id');
+const contractId = window._web4Config?.contractName;
+
 const Dice = ({ value, size }) => (
   <div>
     D{size}: {value}
   </div>
 );
 
-// The main App component
-const App = () => {
-  const playerId = Cookies.get('web4_account_id');
-  const contractId = window._web4Config?.contractName;
-
-  if (!playerId) {
-    return (
-      <div className="App">
-        <h1>Login to play</h1>
-        <a href="/web4/login">Login</a>
-      </div>
-    );
-  }
-
-  const [gameId, setGameId] = useState(null);
-  const [gameState, setGameState] = useState(null);
-  const [selectedDice, setSelectedDice] = useState([]); // To store indices of selected dice for an attack
-  const [selectedDefenderDie, setSelectedDefenderDie] = useState(null); // Index of selected defender die
+const OpenGamesList = () => {
   const [openGames, setOpenGames] = useState([]);
 
-  const apiRequest = async (url, method, body) => {
-    const response = await fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    return response.json();
-  };
-
-  const get = async (url) => apiRequest(url, 'GET');
-  const post = async (url, body) => apiRequest(url, 'POST', body);
-
-  // Fetch game status
   useEffect(() => {
-    if (gameId) {
-      const interval = setInterval(async () => {
-        const status = await get(`/api/games/${gameId}/status`);
-        setGameState(status);
-      }, 2000);
+    const interval = setInterval(async () => {
+      const games = await get('/api/games');
+      setOpenGames(games);
+    }, 2000);
 
-      return () => clearInterval(interval);
-    } else {
-      // Fetch open games
-      const interval = setInterval(async () => {
-        const games = await get('/api/games');
-        setOpenGames(games);
-      }, 2000);
-
-      return () => clearInterval(interval);
-    }
-
-  }, [gameId]);
-
-  const createGame = async () => {
-    const gameId = await post(`/web4/contract/${contractId}/create_game`);
-    setGameId(gameId);
-  };
+    return () => clearInterval(interval);
+  }
+  , []);
 
   const joinGame = async (gameId) => {
     await post(`/web4/contract/${contractId}/join_game`, { game_id: gameId });
     setGameId(gameId);
   };
+
+  return (
+    <div>
+      <h2>Open games</h2>
+      <ul>
+        {openGames.map(game => (
+          <li key={game.id}>
+            Game {game.id} with {game.players.find(p => !!p) } {
+              game.players.find(p => p == playerId)
+                ? <a href={`/games/${game.id}`}>Resume</a>
+                : <button onClick={() => joinGame(game.id)}>Join</button>
+            }
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+const Game = ({ gameId }) => {
+  const [gameState, setGameState] = useState(null);
+  const [selectedDice, setSelectedDice] = useState([]); // To store indices of selected dice for an attack
+  const [selectedDefenderDie, setSelectedDefenderDie] = useState(null); // Index of selected defender die
+
+  // Fetch game status
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const status = await get(`/api/games/${gameId}/status`);
+      setGameState(status);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [gameId]);
 
   const attack = async (attackerDieIndices, defenderDieIndex) => {
     await post(`/web4/contract/${contractId}/attack`, { game_id: gameId, attacker_die_indices: attackerDieIndices, defender_die_index: defenderDieIndex });
@@ -129,34 +131,55 @@ const App = () => {
     </div>
   );
 
+  if (!gameState) {
+    return <div>Loading...</div>;
+  }
+
   return (
-    <div className="App">
-      {!gameId ? (
-        <>
-          <button onClick={createGame}>Create Game</button>
-          <h2>Open games</h2>
-          <ul>
-            {openGames.map(game => (
-              <li key={game.id}>
-                Game {game.id} with {game.players.find(p => !!p) } {
-                  game.players.find(p => p == playerId)
-                    ? <button onClick={() => setGameId(game.id)}>Resume</button>
-                    : <button onClick={() => joinGame(game.id)}>Join</button>
-                }
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        gameState &&
-        <>
-          <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
-          {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.current_player == i, gameState.captured[i]))}
-          <button onClick={performAttack} disabled={gameState && gameState.players[gameState.current_player] !== playerId}>Attack</button>
-        </>
-      )}
+    <div>
+      <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
+      {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.current_player == i, gameState.captured[i]))}
+      <button onClick={performAttack} disabled={gameState && gameState.players[gameState.current_player] !== playerId}>Attack</button>
     </div>
   );
+};
+
+const createGame = async () => {
+  const gameId = await post(`/web4/contract/${contractId}/create_game`);
+
+  console.log('Created game', gameId);
+  // TODO: Push state to history instead?
+  window.location.href = `/games/${gameId}`;
+};
+
+const App = () => {
+  if (!playerId) {
+    return (
+      <div className="App">
+        <h1>Login to play</h1>
+        <a href="/web4/login">Login</a>
+      </div>
+    );
+  }
+
+  const path = window.location.pathname;
+  const parts = path.split('/');
+
+  if (path === '/') {
+    return <>
+      <button onClick={createGame}>Create Game</button>
+
+      <OpenGamesList />
+    </>
+  }
+
+  if (path.startsWith('/games/')) {
+    const gameId = parts[2];
+    return <Game gameId={gameId} />;
+  }
+
+  // Redirect to homepage for unknown paths
+  window.location.href = '/';
 };
 
 export default App;

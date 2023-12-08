@@ -33,7 +33,7 @@ impl Default for Contract {
 impl Contract {
     /// Learn more about web4 here: https://web4.near.page
     pub fn web4_get(&self, request: Web4Request) -> Web4Response {
-        if request.path == "/" {
+        if request.path == "/" || request.path.starts_with("/games/") {
             return self.serve_static("/index.html");
         }
 
