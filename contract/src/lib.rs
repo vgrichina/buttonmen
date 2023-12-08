@@ -540,7 +540,7 @@ mod tests {
 
     #[test]
     fn web4_get_latest_games_empty() {
-        let mut contract = Contract::default();
+        let contract = Contract::default();
 
         let response = contract.web4_get(request_path("/api/games"));
         assert_eq!(response, Web4Response::Body {
@@ -550,7 +550,7 @@ mod tests {
     }
 
     #[test]
-    fn web4_get_latest_games_skip_full() {
+    fn web4_get_latest_games() {
         let mut contract = Contract::default();
         let game1 = contract.create_game();
         let game2 = contract.create_game();
@@ -562,7 +562,11 @@ mod tests {
         match response {
             Web4Response::Body { content_type, body } => {
                 assert_eq!(content_type, "application/json".to_owned());
-                assert_eq!(String::from_utf8(body.into()).unwrap(), serde_json::to_string(&vec![contract.games.get(&game1).unwrap()]).unwrap());
+                assert_eq!(String::from_utf8(body.into()).unwrap(),
+                    serde_json::to_string(&vec![
+                        contract.games.get(&game1).unwrap(),
+                        contract.games.get(&game2).unwrap(),
+                    ]).unwrap());
             },
             _ => panic!("Unexpected response"),
         }
@@ -570,7 +574,7 @@ mod tests {
 
     #[test]
     fn web4_get_your_games_empty() {
-        let mut contract = Contract::default();
+        let contract = Contract::default();
 
         let response = contract.web4_get(request_path("/api/users/bob.near/games"));
         assert_eq!(response, Web4Response::Body {
