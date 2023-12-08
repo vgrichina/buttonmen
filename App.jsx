@@ -205,7 +205,7 @@ const App = () => {
     const gameId = parts[2];
     return <>
       <LoggedInBanner />
-      <Game gameId={gameId} />;
+      <Game gameId={gameId} />
     </>
   }
 
