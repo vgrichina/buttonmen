@@ -39,7 +39,7 @@ const OpenGamesList = () => {
 
   const joinGame = async (gameId) => {
     await post(`/web4/contract/${contractId}/join_game`, { game_id: gameId });
-    setGameId(gameId);
+    window.location.href = `/games/${gameId}`;
   };
 
   return (
