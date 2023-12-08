@@ -176,6 +176,10 @@ const createGame = async () => {
   window.location.href = `/games/${gameId}`;
 };
 
+const LoggedInBanner = () => (
+  <p>Logged in as {playerId} | <a href="/web4/logout">Logout</a></p>
+);
+
 const App = () => {
   if (!playerId) {
     return (
@@ -191,15 +195,18 @@ const App = () => {
 
   if (path === '/') {
     return <>
+      <LoggedInBanner />
       <button onClick={createGame}>Create Game</button>
-
       <OpenGamesList />
     </>
   }
 
   if (path.startsWith('/games/')) {
     const gameId = parts[2];
-    return <Game gameId={gameId} />;
+    return <>
+      <LoggedInBanner />
+      <Game gameId={gameId} />;
+    </>
   }
 
   // Redirect to homepage for unknown paths
