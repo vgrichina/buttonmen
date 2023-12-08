@@ -63,17 +63,21 @@ const OpenGamesList = () => {
   );
 };
 
-const AwaitingTurnGamesList = () => {
+const AwaitingTurnGamesList = ({ gameId }) => {
   const [games, setGames] = useState([]);
 
   useEffect(() => {
     const interval = setInterval(async () => {
-      const games = await get(`/api/user/${playerId}/games`);
-      setGames(games.filter(game => game.current_player === game.players.indexOf(playerId)));
+      const games = await get(`/api/users/${playerId}/games`);
+      setGames(games.filter(game => game.id !== gameId && game.current_player === game.players.indexOf(playerId)));
     }, 2000);
 
     return () => clearInterval(interval);
   }, []);
+
+  if (games.length === 0) {
+    return null;
+  }
 
   return (
     <div>
@@ -164,7 +168,7 @@ const Game = ({ gameId }) => {
       {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.current_player == i, gameState.captured[i]))}
       <button onClick={performAttack} disabled={gameState && gameState.players[gameState.current_player] !== playerId}>Attack</button>
 
-      <AwaitingTurnGamesList />
+      <AwaitingTurnGamesList gameId={gameId} />
     </div>
   );
 };

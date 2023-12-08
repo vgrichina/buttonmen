@@ -101,12 +101,11 @@ impl Contract {
             }
         }
 
-        if request.path.starts_with("/api/user") {
-            // handle /api/user/user_id/games
+        if request.path.starts_with("/api/users") {
             let parts = request.path.split("/").collect::<Vec<&str>>();
             let user_id = parts[3];
 
-            if parts.len() == 5 && parts[4] == "games" {
+            if parts[4] == "games" {
                 let user_games_ids = match env::storage_read(format!("ug:{}", user_id).as_bytes()) {
                     Some(user_games_vec) => {
                         let user_games_str = String::from_utf8(user_games_vec).unwrap();
@@ -114,7 +113,6 @@ impl Contract {
                     },
                     None => vec![],
                 };
-                println!("user_games_ids: {:?}", user_games_ids);
 
                 return Web4Response::Body {
                     content_type: "application/json".to_owned(),
@@ -324,6 +322,12 @@ mod tests {
     use near_sdk::testing_env;
     use near_sdk::test_utils::VMContextBuilder;
 
+    fn login_as(player_id: &str) {
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(player_id.parse().unwrap())
+            .build());
+    }
+
     #[test]
     fn create_game() {
         let mut contract = Contract::default();
@@ -358,9 +362,7 @@ mod tests {
         let mut contract = Contract::default();
         contract.create_game();
 
-        testing_env!(VMContextBuilder::new()
-            .predecessor_account_id("alice.near".parse().unwrap())
-            .build());
+        login_as("alice.near");
         contract.join_game("1".to_string());
 
         assert_eq!(contract.last_game_id, 1);
@@ -383,9 +385,7 @@ mod tests {
         let mut contract = Contract::default();
         contract.create_game();
 
-        testing_env!(VMContextBuilder::new()
-            .predecessor_account_id("alice.near".parse().unwrap())
-            .build());
+        login_as("alice.near");
         contract.join_game("1".to_string());
 
         testing_env!(VMContextBuilder::new()
@@ -407,9 +407,7 @@ mod tests {
         let mut contract = Contract::default();
         contract.create_game();
 
-        testing_env!(VMContextBuilder::new()
-            .predecessor_account_id("alice.near".parse().unwrap())
-            .build());
+        login_as("alice.near");
         contract.join_game("1".to_string());
         contract.attack("1".to_string(), vec![0], 0);
     }
@@ -567,9 +565,7 @@ mod tests {
         let game1 = contract.create_game();
         let game2 = contract.create_game();
 
-        testing_env!(VMContextBuilder::new()
-            .predecessor_account_id("alice.near".parse().unwrap())
-            .build());
+        login_as("alice.near");
         contract.join_game(game2.clone());
 
         let response = contract.web4_get(request_path("/api/games"));
@@ -586,7 +582,7 @@ mod tests {
     fn web4_get_your_games_empty() {
         let mut contract = Contract::default();
 
-        let response = contract.web4_get(request_path("/api/user/bob.near/games"));
+        let response = contract.web4_get(request_path("/api/users/bob.near/games"));
         assert_eq!(response, Web4Response::Body {
             content_type: "application/json".to_owned(),
             body: "[]".as_bytes().to_owned().into(),
@@ -599,12 +595,10 @@ mod tests {
         let game1 = contract.create_game();
         let game2 = contract.create_game();
 
-        testing_env!(VMContextBuilder::new()
-            .predecessor_account_id("alice.near".parse().unwrap())
-            .build());
+        login_as("alice.near");
         contract.join_game(game2.clone());
 
-        match contract.web4_get(request_path("/api/user/alice.near/games")) {
+        match contract.web4_get(request_path("/api/users/alice.near/games")) {
             Web4Response::Body { content_type, body } => {
                 assert_eq!(content_type, "application/json".to_owned());
                 assert_eq!(String::from_utf8(body.into()).unwrap(),
@@ -614,7 +608,7 @@ mod tests {
             _ => panic!("Unexpected response"),
         }
 
-        match contract.web4_get(request_path("/api/user/bob.near/games")) {
+        match contract.web4_get(request_path("/api/users/bob.near/games")) {
             Web4Response::Body { content_type, body } => {
                 assert_eq!(content_type, "application/json".to_owned());
                 assert_eq!(String::from_utf8(body.into()).unwrap(),
