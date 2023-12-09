@@ -102,6 +102,10 @@ const Game = ({ gameId }) => {
     await post(`/web4/contract/${contractId}/attack`, { game_id: gameId, attacker_die_indices: attackerDieIndices, defender_die_index: defenderDieIndex });
   };
 
+  const pass = async () => {
+    await post(`/web4/contract/${contractId}/pass`, { game_id: gameId });
+  }
+
   const selectDieForAttack = (index) => {
     setSelectedDice(prev => {
       // Add or remove the die index from the selection
@@ -163,6 +167,7 @@ const Game = ({ gameId }) => {
       <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
       {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.current_player == i, gameState.captured[i]))}
       <button onClick={performAttack} disabled={gameState && gameState.players[gameState.current_player] !== playerId}>Attack</button>
+      <button onClick={pass} disabled={gameState && gameState.players[gameState.current_player] !== playerId}>Pass</button>
 
       <AwaitingTurnGamesList gameId={gameId} />
     </div>
