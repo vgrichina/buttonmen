@@ -35,9 +35,9 @@ const GameList = ({ games }) => (!games
     {games.map(game => (
       <li key={game.id}>
         Game {game.id}: {game.players[0]} vs {game.players[1] || '???'} {
-          game.players.find(p => p == playerId)
+          game.players.some(p => p == playerId)
             ? <a href={`/games/${game.id}`}>Resume</a>
-            : (game.players.find(p => p == "")
+            : (game.players.some(p => p == "")
               ? <button onClick={() => joinGame(game.id)}>Join</button>
               : <a href={`/games/${game.id}`}>Spectate</a>)
         }
