@@ -269,6 +269,59 @@ impl Contract {
         }
     }
 
+    pub fn pass(&mut self, game_id: String) -> () {
+        let player_id = env::predecessor_account_id().to_string();
+
+        match self.games.get(&game_id) {
+            Some(mut game) => {
+                let current_player_index = game.players.iter().position(|p| p == &player_id).unwrap_or_else(|| panic!("Player {} has not joined game {}", player_id, game_id));
+                if game.current_player != current_player_index as u8 {
+                    panic!("It is not your turn");
+                }
+
+                let other_player = (game.current_player + 1) % 2;
+
+                // Verify that power attack is not possible
+                for attacker_die_index in 0..game.dice[game.current_player as usize].len() {
+                    for defender_die_index in 0..game.dice[other_player as usize].len() {
+                        if game.dice[game.current_player as usize][attacker_die_index].value >= game.dice[other_player as usize][defender_die_index].value {
+                            panic!("Power attack is possible");
+                        }
+                    }
+                }
+
+                fn is_skill_attack_possible(attacker_dice_values: &[u8], defender_die_value: u8) -> bool {
+                    if attacker_dice_values.len() == 0 {
+                        return defender_die_value == 0;
+                    }
+
+                    return is_skill_attack_possible(&attacker_dice_values[1..], defender_die_value) ||
+                        defender_die_value >= attacker_dice_values[0] &&
+                        is_skill_attack_possible(&attacker_dice_values[1..], defender_die_value - attacker_dice_values[0]);
+                }
+
+                // Verify that skill attack is not possible
+                for defender_die_index in 0..game.dice[other_player as usize].len() {
+                    let defender_die_value = game.dice[other_player as usize][defender_die_index].value;
+                    let attacker_dice_values = game.dice[game.current_player as usize].iter().map(|die| die.value).collect::<Vec<u8>>();
+
+                    if is_skill_attack_possible(&attacker_dice_values, defender_die_value) {
+                        panic!("Skill attack is possible");
+                    }
+                }
+
+                // Switch to the next player
+                game.current_player = other_player;
+
+                // Update the game state
+                self.games.insert(&game_id, &game);
+            },
+            None => {
+                panic!("Game not found: {}", game_id);
+            }
+        }
+    }
+
     // TODO: Move this to a separate trait together with serve_static
     pub fn web4_setStaticUrl(&mut self, url: String) -> () {
         // TODO: Allow to set owner like in https://github.com/near/near-sdk-rs/blob/00226858199419aaa8c99f756bd192851666fb36/near-contract-standards/src/upgrade/mod.rs#L7
@@ -443,14 +496,10 @@ mod tests {
         let mut contract = Contract::default();
         contract.create_game();
 
-        testing_env!(VMContextBuilder::new()
-            .predecessor_account_id("alice.near".parse().unwrap())
-            .build());
+        login_as("alice.near");
         contract.join_game("1".to_string());
 
-        testing_env!(VMContextBuilder::new()
-            .predecessor_account_id("eve.near".parse().unwrap())
-            .build());
+        login_as("eve.near");
         contract.attack("1".to_string(), vec![0], 0);
     }
 
@@ -466,9 +515,7 @@ mod tests {
             captured: vec![vec![], vec![]],
         });
 
-        testing_env!(VMContextBuilder::new()
-            .predecessor_account_id("bob.near".parse().unwrap())
-            .build());
+        login_as("bob.near");
         contract.attack("1".to_string(), vec![0], 0);
     }
 
@@ -524,9 +571,7 @@ mod tests {
             captured: vec![vec![], vec![]],
         });
 
-        testing_env!(VMContextBuilder::new()
-            .predecessor_account_id("alice.near".parse().unwrap())
-            .build());
+        login_as("alice.near");
         contract.attack("1".to_string(), vec![0], 1);
 
         let game = contract.games.get(&"1".to_string()).unwrap();
@@ -535,6 +580,86 @@ mod tests {
         // NOTE: The attacker's die is re-rolled. It's deterministic in tests
         assert_eq!(game.dice, vec![vec![Die { size: 4, value: 4 }], vec![Die { size: 4, value: 2 }]]);
         assert_eq!(game.captured, vec![vec![], vec![6]]);
+    }
+
+    #[test]
+    #[should_panic(expected = "It is not your turn")]
+    fn pass_not_your_turn() {
+        let mut contract = Contract::default();
+        contract.create_game();
+
+        login_as("alice.near");
+        contract.join_game("1".to_string());
+        contract.pass("1".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Player eve.near has not joined game 1")]
+    fn pass_not_joined() {
+        let mut contract = Contract::default();
+        contract.create_game();
+
+        login_as("alice.near");
+        contract.join_game("1".to_string());
+
+        login_as("eve.near");
+        contract.pass("1".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Power attack is possible")]
+    fn pass_power_attack_possible() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![vec![Die { size: 4, value: 1 }, Die { size: 6, value: 4} ], vec![Die { size: 4, value: 2 }]],
+            captured: vec![vec![], vec![]],
+        });
+
+        contract.pass("1".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Skill attack is possible")]
+    fn pass_skill_attack_possible() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![
+                vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1 }, Die { size: 10, value: 2 }],
+                vec![Die { size: 4, value: 3 }, Die { size: 8, value: 6 }]],
+            captured: vec![vec![], vec![]],
+        });
+
+        contract.pass("1".to_string());
+    }
+
+    #[test]
+    fn pass_success() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![
+                vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1} ],
+                vec![Die { size: 4, value: 3 }]],
+            captured: vec![vec![], vec![]],
+        });
+
+        contract.pass("1".to_string());
+
+        let game = contract.games.get(&"1".to_string()).unwrap();
+        assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
+        assert_eq!(game.current_player, 1);
+        assert_eq!(game.dice, vec![
+            vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1} ],
+            vec![Die { size: 4, value: 3 }]]);
+        assert_eq!(game.captured, vec![vec![], vec![]] as Vec<Vec<u8>>);
     }
 
     fn request_path(path: &str) -> Web4Request {
