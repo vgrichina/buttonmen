@@ -84,10 +84,17 @@ impl Contract {
 
             match self.games.get(&game_id.to_string()) {
                 Some(game) => {
+                    let game_view = GameView {
+                        id: game.id.clone(),
+                        players: game.players.clone(),
+                        current_player: game.current_player,
+                        dice: game.dice.clone(),
+                        captured: game.captured.clone(),
+                        is_pass_allowed: self.is_pass_allowed(&game),
+                    };
                     return Web4Response::Body {
                         content_type: "application/json".to_owned(),
-                        // return game as JSON
-                        body: serde_json::to_vec(&game).unwrap().into(),
+                        body: serde_json::to_vec(&game_view).unwrap().into(),
                     }
                 },
                 None => {
@@ -116,7 +123,6 @@ impl Contract {
 
                 return Web4Response::Body {
                     content_type: "application/json".to_owned(),
-                    // return game as JSON
                     body: serde_json::to_vec(&user_games_ids.iter()
                         .map(|game_id| { self.games.get(&game_id.to_string()).unwrap() })
                         .collect::<Vec<Game>>()).unwrap().into(),
@@ -271,7 +277,7 @@ impl Contract {
 
     fn find_power_attack(game: &Game) -> Option<(usize, usize)> {
         let current_player_index = game.current_player as usize;
-        let other_player_index = (game.current_player + 1) as usize % 2;
+        let other_player_index = (game.current_player as usize + 1) % 2;
 
         // Verify that power attack is not possible
         for attacker_die_index in 0..game.dice[current_player_index].len() {
@@ -287,7 +293,7 @@ impl Contract {
 
     fn find_skill_attack(game: &Game) -> Option<(Vec<u8>, u8)> {
         let current_player_index = game.current_player as usize;
-        let other_player_index = (game.current_player + 1) as usize % 2;
+        let other_player_index = (game.current_player as usize + 1) % 2;
 
         fn find_skill_attack_recursive(attacker_dice_values: &[u8], defender_die_value: u8, selected_attacker_dice: Vec<u8>) -> Option<Vec<u8>> {
             if attacker_dice_values.len() == 0 {
@@ -330,8 +336,13 @@ impl Contract {
     }
 
     fn is_pass_allowed(&self, game: &Game) -> bool {
+        if game.current_player as usize > game.players.len() {
+            // Game not started yet
+            return false;
+        }
+
         let current_player_index = game.current_player as usize;
-        let other_player_index = (game.current_player + 1) as usize % 2;
+        let other_player_index = (game.current_player as usize + 1) % 2;
 
         let power_attack = Self::find_power_attack(game);
         if power_attack.is_some() {
@@ -444,6 +455,17 @@ pub struct Game {
     current_player: u8,
     dice: Vec<Vec<Die>>,
     captured: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct GameView {
+    id: String,
+    players: Vec<String>,
+    current_player: u8,
+    dice: Vec<Vec<Die>>,
+    captured: Vec<Vec<u8>>,
+    is_pass_allowed: bool,
 }
 
 #[cfg(test)]
@@ -745,6 +767,79 @@ mod tests {
 
         assert_eq!(response, Web4Response::BodyUrl {
             body_url: "ipfs://bafkreig74di4midqzggkjfmtfu4c7gei3u6scihgkvig2k4mjrovcjl4ri/static/style.css".to_string(),
+        });
+    }
+
+    #[test]
+    fn web4_get_game_state() {
+        let mut contract = Contract::default();
+        let game_id = contract.create_game();
+
+        let response = contract.web4_get(request_path(&format!("/api/games/{}", game_id)));
+        match response {
+            Web4Response::Body { content_type, body } => {
+                assert_eq!(content_type, "application/json".to_owned());
+                assert_eq!(String::from_utf8(body.into()).unwrap(),
+                    serde_json::to_string(&serde_json::json!({
+                        "id": game_id,
+                        "players": ["bob.near", ""],
+                        "current_player": 0xff,
+                        "dice": [
+                            [{"size": 4, "value": 2}, {"size": 6, "value": 4}, {"size": 8, "value": 5}, {"size": 10, "value": 5}, {"size": 20, "value": 5}],
+                            []
+                        ],
+                        "captured": [[], []],
+                        "is_pass_allowed": false,
+                    })).unwrap());
+
+            },
+            _ => panic!("Unexpected response"),
+        }
+    }
+
+    #[test]
+    fn web4_get_game_state_is_pass_allowed() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![
+                vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1} ],
+                vec![Die { size: 4, value: 3 }]],
+            captured: vec![vec![], vec![]],
+        });
+
+        let response = contract.web4_get(request_path(&format!("/api/games/1")));
+        match response {
+            Web4Response::Body { content_type, body } => {
+                assert_eq!(content_type, "application/json".to_owned());
+                assert_eq!(String::from_utf8(body.into()).unwrap(),
+                    serde_json::to_string(&serde_json::json!({
+                        "id": "1",
+                        "players": ["bob.near", "alice.near"],
+                        "current_player": 0,
+                        "dice": [
+                            [{"size": 4, "value": 1}, {"size": 6, "value": 1}],
+                            [{"size": 4, "value": 3}]
+                        ],
+                        "captured": [[], []],
+                        "is_pass_allowed": true,
+                    })).unwrap());
+            },
+            _ => panic!("Unexpected response"),
+        }
+    }
+
+    #[test]
+    fn web4_get_game_state_not_found() {
+        let contract = Contract::default();
+
+        let response = contract.web4_get(request_path("/api/games/1"));
+        // TODO: JSON error?
+        assert_eq!(response, Web4Response::Body {
+            content_type: "text/html; charset=UTF-8".to_owned(),
+            body: "<h1>Game not found</h1>".as_bytes().to_owned().into(),
         });
     }
 

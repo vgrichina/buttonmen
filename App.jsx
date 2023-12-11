@@ -166,8 +166,8 @@ const Game = ({ gameId }) => {
     <div>
       <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
       {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.current_player == i, gameState.captured[i]))}
-      <button onClick={performAttack} disabled={gameState && gameState.players[gameState.current_player] !== playerId}>Attack</button>
-      <button onClick={pass} disabled={gameState && gameState.players[gameState.current_player] !== playerId}>Pass</button>
+      <button onClick={performAttack} disabled={gameState.players[gameState.current_player] !== playerId}>Attack</button>
+      <button onClick={pass} disabled={gameState.players[gameState.current_player] !== playerId || !gameState.is_pass_allowed}>Pass</button>
 
       <AwaitingTurnGamesList gameId={gameId} />
     </div>
