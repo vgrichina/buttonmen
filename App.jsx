@@ -183,7 +183,7 @@ const createGame = async () => {
 };
 
 const LoggedInBanner = () => (
-  <p>Logged in as {playerId} | <a href="/web4/logout">Logout</a></p>
+  <p><a href="/">Home</a> | Logged in as {playerId} | <a href="/web4/logout">Logout</a></p>
 );
 
 const App = () => {
