@@ -196,12 +196,20 @@ const LoggedInBanner = () => (
   <p><a href="/">Home</a> | Logged in as {playerId} | <a href="/web4/logout">Logout</a></p>
 );
 
+const RulesBanner = () => (
+  <div>
+    <p>See <a href="https://buttonmen.fandom.com/wiki/Button_Men_Rules#The_Basics">Button Men Rules</a> for the rules of the game.</p>
+  </div>
+);
+
 const App = () => {
   if (!playerId) {
     return (
       <div className="App">
         <h1>Login to play</h1>
         <a href="/web4/login">Login</a>
+
+        <RulesBanner />
       </div>
     );
   }
@@ -216,6 +224,8 @@ const App = () => {
       <LatestGamesList />
 
       <AwaitingTurnGamesList />
+
+      <RulesBanner />
     </>
   }
 
@@ -224,6 +234,8 @@ const App = () => {
     return <>
       <LoggedInBanner />
       <Game gameId={gameId} />
+
+      <RulesBanner />
     </>
   }
 
