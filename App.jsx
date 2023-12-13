@@ -146,7 +146,7 @@ const Game = ({ gameId }) => {
           <button
             key={index}
             onClick={() => !isActive ? selectDefenderDieForAttack(index) : selectDieForAttack(index)}
-            style={{ backgroundColor: isSelected ? 'yellow' : 'white' }}
+            style={{ backgroundColor: isSelected ? 'rgb(128,191,255)' : 'var(--button-base)' }}
           >
             <Dice value={die.value} size={die.size} />
           </button>
