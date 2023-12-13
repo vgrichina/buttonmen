@@ -134,9 +134,9 @@ const Game = ({ gameId }) => {
   };
 
   const renderDice = (playerDice, dicePlayerId, isActive, captured) => (
-    <div>
+    <div style={isActive ? { backgroundColor: 'rgb(255,247,230)' } : {}} >
       <h3>{dicePlayerId} {dicePlayerId == playerId && '(You)'}</h3>
-      { isActive && dicePlayerId == playerId && <p>It's your turn</p> }
+      { isActive && dicePlayerId == playerId && <p><b>It's your turn</b></p> }
       <h4>Dice</h4>
       {playerDice.map((die, index) => {
         const isSelected = !isActive
