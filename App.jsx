@@ -162,10 +162,20 @@ const Game = ({ gameId }) => {
     return <div>Loading...</div>;
   }
 
+  const currentPlayerIndex = gameState.players.indexOf(playerId);
+  const otherPlayerIndex = (currentPlayerIndex + 1) % 2;
+
   return (
     <div>
       <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
-      {[0, 1].map(i => renderDice(gameState.dice[i], gameState.players[i], gameState.current_player == i, gameState.captured[i]))}
+      <div class="this-player">
+        {renderDice(gameState.dice[currentPlayerIndex], gameState.players[currentPlayerIndex], gameState.current_player === currentPlayerIndex, gameState.captured[currentPlayerIndex])}
+      </div>
+      <div class="other-player">
+        {gameState.players[otherPlayerIndex] == '' ? <p><b>Waiting for player to join...</b></p>
+          : renderDice(gameState.dice[otherPlayerIndex], gameState.players[otherPlayerIndex], gameState.current_player === otherPlayerIndex, gameState.captured[otherPlayerIndex])}
+      </div>
+
       <button onClick={performAttack} disabled={gameState.players[gameState.current_player] !== playerId}>Attack</button>
       <button onClick={pass} disabled={gameState.players[gameState.current_player] !== playerId || !gameState.is_pass_allowed}>Pass</button>
 
