@@ -11,44 +11,28 @@ const MAX_LATEST_GAMES: usize = 10;
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct Contract {
     pub games: LookupMap<String, Game>,
+    pub players: LookupMap<String, Player>,
     pub last_game_id: u64,
     pub latest_games: Vec<String>,
     pub web4_static_url: String,
+
+    // NOTE: This is reserved for future upgrades, can be replaced with enum later
+    pub reserved: Option<()>,
 }
 
 impl Default for Contract {
     fn default() -> Self {
         Self {
             games: LookupMap::new(b"g".to_vec()),
+            players: LookupMap::new(b"p".to_vec()),
             last_game_id: 0,
             latest_games: vec![],
             // NOTE: This points to web4.near.page static by default
             // TODO: Point to default deployment of this game frontend
             web4_static_url: "ipfs://bafkreig74di4midqzggkjfmtfu4c7gei3u6scihgkvig2k4mjrovcjl4ri".to_string(),
+            reserved: None,
         }
     }
-}
-
-fn user_games_key(player_id: String) -> Vec<u8> {
-    format!("ug:{}", player_id).as_bytes().to_vec()
-}
-
-fn get_user_games(player_id: String) -> Vec<String> {
-    match env::storage_read(&user_games_key(player_id)) {
-        Some(user_games_vec) => {
-            let user_games_str = String::from_utf8(user_games_vec).unwrap();
-            user_games_str.split(",").map(|s| s.to_string()).collect::<Vec<String>>()
-        },
-        None => vec![],
-    }
-}
-
-fn add_user_game(player_id: String, game_id: String) -> () {
-    let mut user_games_ids = get_user_games(player_id.to_string());
-    user_games_ids.push(game_id);
-    env::storage_write(&user_games_key(player_id), &user_games_ids.join(",").as_bytes());
-
-    // TODO: Limit the number of games per user
 }
 
 #[near_bindgen]
@@ -73,8 +57,6 @@ impl Contract {
                     content_type: "application/json".to_owned(),
                     body: serde_json::to_vec(&self.latest_games.iter()
                         .map(|game_id| { self.games.get(&game_id.to_string()).unwrap() })
-                        // TODO: Track games you joined separately
-                        // .filter(|game| { game.players.contains(&"".to_string()) })
                         .collect::<Vec<Game>>()).unwrap().into(),
                 }
             }
@@ -113,11 +95,8 @@ impl Contract {
             let user_id = parts[3];
 
             if parts[4] == "games" {
-                let user_games_ids = match env::storage_read(format!("ug:{}", user_id).as_bytes()) {
-                    Some(user_games_vec) => {
-                        let user_games_str = String::from_utf8(user_games_vec).unwrap();
-                        user_games_str.split(",").map(|s| s.to_string()).collect::<Vec<String>>()
-                    },
+                let user_games_ids = match self.players.get(&user_id.to_string()) {
+                    Some(player) => player.games.clone(),
                     None => vec![],
                 };
 
@@ -154,7 +133,7 @@ impl Contract {
             current_player: 0xFF,
             // TODO: Roll dice according to character sheet
             dice: vec![roll_dice(&mut rng, vec![4, 6, 8, 10, 20]), vec![]],
-            captured: vec![vec![], vec![]],
+            ..Default::default()
         };
 
         self.games.insert(&game_id, &game);
@@ -163,7 +142,15 @@ impl Contract {
             self.latest_games.remove(0);
         }
 
-        add_user_game(player_id.to_string(), game_id.clone());
+        let mut player = self.players.get(&player_id.to_string()).unwrap_or_else(|| {
+            let player = Player {
+                id: player_id.to_string(),
+                ..Default::default()
+            };
+            player
+        });
+        player.games.push(game_id.clone());
+        self.players.insert(&player_id.to_string(), &player);
 
         return game_id;
     }
@@ -210,7 +197,15 @@ impl Contract {
                         // Update the game state
                         self.games.insert(&game_id, &game);
 
-                        add_user_game(player_id.to_string(), game_id.clone());
+                        let mut player = self.players.get(&player_id.to_string()).unwrap_or_else(|| {
+                            let player = Player {
+                                id: player_id.to_string(),
+                                ..Default::default()
+                            };
+                            player
+                        });
+                        player.games.push(game_id.clone());
+                        self.players.insert(&player_id.to_string(), &player);
                     },
                     None => {
                         panic!("Game is full: {}", game_id);
@@ -341,9 +336,6 @@ impl Contract {
             return false;
         }
 
-        let current_player_index = game.current_player as usize;
-        let other_player_index = (game.current_player as usize + 1) % 2;
-
         let power_attack = Self::find_power_attack(game);
         if power_attack.is_some() {
             return false;
@@ -445,6 +437,8 @@ pub enum Web4Response {
 pub struct Die {
     size: u8,
     value: u8
+
+    // TODO: DieType enum?
 }
 
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
@@ -455,6 +449,26 @@ pub struct Game {
     current_player: u8,
     dice: Vec<Vec<Die>>,
     captured: Vec<Vec<u8>>,
+    round: u8,
+    scores: Vec<Vec<Vec<u8>>>,
+
+    // NOTE: This is reserved for future upgrades, can be replaced with enum later
+    reserved: Option<()>,
+}
+
+impl Default for Game {
+    fn default() -> Self {
+        Self {
+            id: "".to_string(),
+            players: vec![],
+            current_player: 0,
+            dice: vec![vec![], vec![]],
+            captured: vec![vec![], vec![]],
+            round: 0,
+            scores: vec![],
+            reserved: None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -465,7 +479,33 @@ pub struct GameView {
     current_player: u8,
     dice: Vec<Vec<Die>>,
     captured: Vec<Vec<u8>>,
+
+    // TODO: Copy other fields from Game
+
     is_pass_allowed: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Player {
+    id: String,
+    games: Vec<String>,
+
+    // TODO: more fields. Track wins / etc?
+
+
+    // NOTE: This is reserved for future upgrades, can be replaced with enum later
+    reserved: Option<()>,
+}
+
+impl Default for Player {
+    fn default() -> Self {
+        Self {
+            id: "".to_string(),
+            games: vec![],
+            reserved: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -590,7 +630,7 @@ mod tests {
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
             dice: vec![vec![Die { size: 4, value: 1 }], vec![Die { size: 4, value: 2 }]],
-            captured: vec![vec![], vec![]],
+            ..Default::default()
         });
 
         login_as("bob.near");
@@ -605,7 +645,7 @@ mod tests {
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
             dice: vec![vec![Die { size: 4, value: 4 }, Die { size: 6, value: 1} ], vec![Die { size: 4, value: 2 }]],
-            captured: vec![vec![], vec![]],
+            ..Default::default()
         });
 
         contract.attack("1".to_string(), vec![0], 0);
@@ -626,7 +666,7 @@ mod tests {
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
             dice: vec![vec![Die { size: 4, value: 2 }, Die { size: 6, value: 4 }], vec![Die { size: 10, value: 6 }]],
-            captured: vec![vec![], vec![]],
+            ..Default::default()
         });
 
         contract.attack("1".to_string(), vec![0, 1], 0);
@@ -646,7 +686,7 @@ mod tests {
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 1,
             dice: vec![vec![Die { size: 4, value: 4 }, Die { size: 6, value: 1} ], vec![Die { size: 4, value: 3 }]],
-            captured: vec![vec![], vec![]],
+            ..Default::default()
         });
 
         login_as("alice.near");
@@ -693,7 +733,7 @@ mod tests {
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
             dice: vec![vec![Die { size: 4, value: 1 }, Die { size: 6, value: 4} ], vec![Die { size: 4, value: 2 }]],
-            captured: vec![vec![], vec![]],
+            ..Default::default()
         });
 
         contract.pass("1".to_string());
@@ -710,7 +750,7 @@ mod tests {
             dice: vec![
                 vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1 }, Die { size: 10, value: 2 }],
                 vec![Die { size: 4, value: 3 }, Die { size: 8, value: 6 }]],
-            captured: vec![vec![], vec![]],
+            ..Default::default()
         });
 
         contract.pass("1".to_string());
@@ -726,7 +766,7 @@ mod tests {
             dice: vec![
                 vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1} ],
                 vec![Die { size: 4, value: 3 }]],
-            captured: vec![vec![], vec![]],
+            ..Default::default()
         });
 
         contract.pass("1".to_string());
@@ -807,7 +847,7 @@ mod tests {
             dice: vec![
                 vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1} ],
                 vec![Die { size: 4, value: 3 }]],
-            captured: vec![vec![], vec![]],
+            ..Default::default()
         });
 
         let response = contract.web4_get(request_path(&format!("/api/games/1")));
