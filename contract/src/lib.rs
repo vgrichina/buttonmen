@@ -7,13 +7,37 @@ use near_rng::Rng;
 
 const MAX_LATEST_GAMES: usize = 10;
 
+const DEFAULT_DICE: [Die; 5] = [
+    Die { kind: DieKind::Normal, size: 4 },
+    Die { kind: DieKind::Normal, size: 6 },
+    Die { kind: DieKind::Normal, size: 8 },
+    Die { kind: DieKind::Normal, size: 10 },
+    Die { kind: DieKind::Normal, size: 20 },
+];
+
+
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub enum DieKind {
+    Normal,
+    Poision,
+    Speed,
+    SwingDice { low_size: u8, high_size: u8 },
+}
+
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Die {
+    kind: DieKind,
     size: u8,
-    value: u8
+}
 
-    // TODO: DieType enum?
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct DieRoll {
+    #[serde(flatten)]
+    die: Die,
+    value: u8
 }
 
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
@@ -22,7 +46,7 @@ pub struct Game {
     id: String,
     players: Vec<String>,
     current_player: u8,
-    dice: Vec<Vec<Die>>,
+    dice: Vec<Vec<DieRoll>>,
     captured: Vec<Vec<u8>>,
     round: u8,
     scores: Vec<Vec<Vec<u8>>>,
@@ -52,7 +76,7 @@ pub struct GameView {
     id: String,
     players: Vec<String>,
     current_player: u8,
-    dice: Vec<Vec<Die>>,
+    dice: Vec<Vec<DieRoll>>,
     captured: Vec<Vec<u8>>,
 
     // TODO: Copy other fields from Game
@@ -208,7 +232,7 @@ impl Contract {
             players: vec![player_id.to_string(), "".to_string()],
             current_player: 0xFF,
             // TODO: Roll dice according to character sheet
-            dice: vec![roll_dice(&mut rng, vec![4, 6, 8, 10, 20]), vec![]],
+            dice: vec![roll_dice(&mut rng, DEFAULT_DICE.to_vec()), vec![]],
             ..Default::default()
         };
 
@@ -231,12 +255,12 @@ impl Contract {
         return game_id;
     }
 
-    fn determine_starting_player(&self, dice: Vec<Vec<Die>>) -> u8 {
+    fn determine_starting_player(&self, dice: Vec<Vec<DieRoll>>) -> u8 {
         // Sorted dice from lowest to highest for every player
         let sorted_dice = dice.iter().cloned().map(|mut dice| {
             dice.sort_by(|a, b| a.value.cmp(&b.value));
             dice
-        }).collect::<Vec<Vec<Die>>>();
+        }).collect::<Vec<Vec<DieRoll>>>();
 
         // Whoever rolled the single lowest number will go first.
         // If the lowest dice are tied, compare the next lowest dice,
@@ -268,7 +292,7 @@ impl Contract {
                         game.players[player_index] = player_id.to_string();
                         // TODO: Roll dice according to character sheet
                         let mut rng = Rng::new(&env::random_seed());
-                        game.dice[player_index] = roll_dice(&mut rng, vec![4, 6, 8, 10, 20]);
+                        game.dice[player_index] = roll_dice(&mut rng, DEFAULT_DICE.to_vec());
 
                         // TODO: If all numbers are tied, the round is a draw.
                         game.current_player = self.determine_starting_player(game.dice.clone());
@@ -325,12 +349,12 @@ impl Contract {
                 }
 
                 // Capture the die
-                game.captured[current_player_index].push(game.dice[defender_dice_idx][defender_die_index as usize].size);
+                game.captured[current_player_index].push(game.dice[defender_dice_idx][defender_die_index as usize].die.size);
                 game.dice[defender_dice_idx].remove(defender_die_index as usize);
                 // Re-roll attacker dice
                 let mut rng = Rng::new(&env::random_seed());
                 attacker_die_indices.iter().for_each(|index| {
-                    game.dice[attacker_dice_idx][*index as usize] = roll_die(&mut rng, game.dice[attacker_dice_idx][*index as usize].size);
+                    game.dice[attacker_dice_idx][*index as usize] = roll_die(&mut rng, &game.dice[attacker_dice_idx][*index as usize].die);
                 });
                 // Switch to the next player
                 game.current_player = (game.current_player + 1) % 2;
@@ -498,15 +522,15 @@ impl Contract {
     }
 }
 
-fn roll_die(rng: &mut Rng, size: u8) -> Die {
-    Die {
-        size,
-        value: rng.rand_range_u32(1, size.into()) as u8,
+fn roll_die(rng: &mut Rng, die: &Die) -> DieRoll {
+    DieRoll {
+        die: die.clone(),
+        value: rng.rand_range_u32(1, die.size.into()) as u8,
     }
 }
 
-fn roll_dice(rng: &mut Rng, sizes: Vec<u8>) -> Vec<Die> {
-    sizes.iter().map(|size| roll_die(rng, *size)).collect()
+fn roll_dice(rng: &mut Rng, dice: Vec<Die>) -> Vec<DieRoll> {
+    dice.iter().map(|die| roll_die(rng, &die)).collect()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -550,6 +574,16 @@ mod tests {
         testing_env!(VMContextBuilder::new()
             .predecessor_account_id(player_id.parse().unwrap())
             .build());
+    }
+
+    fn die(size: u8, value: u8) -> DieRoll {
+        DieRoll {
+            die: Die {
+                kind: DieKind::Normal,
+                size,
+            },
+            value,
+        }
     }
 
     #[test]
@@ -602,8 +636,8 @@ mod tests {
         assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
         assert_eq!(game.current_player, 1);
         assert_eq!(game.dice, vec![
-            vec![Die { size: 4, value: 2 }, Die { size: 6, value: 4 }, Die { size: 8, value: 5 }, Die { size: 10, value: 5}, Die { size: 20, value: 5 }],
-            vec![Die { size: 4, value: 2 }, Die { size: 6, value: 3 }, Die { size: 8, value: 2 }, Die { size: 10, value: 1 }, Die { size: 20, value: 5 }]]);
+            vec![die(4, 2), die(6, 4), die(8, 5), die(10, 5), die(20, 5)],
+            vec![die(4, 2), die(6, 3), die(8, 2), die(10, 1), die(20, 5)]]);
         assert_eq!(game.captured, vec![vec![], vec![]] as Vec<Vec<u8>>);
     }
 
@@ -661,7 +695,7 @@ mod tests {
             id: "1".to_string(),
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
-            dice: vec![vec![Die { size: 4, value: 1 }], vec![Die { size: 4, value: 2 }]],
+            dice: vec![vec![die(4, 1)], vec![die(4, 2)]],
             ..Default::default()
         });
 
@@ -676,7 +710,7 @@ mod tests {
             id: "1".to_string(),
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
-            dice: vec![vec![Die { size: 4, value: 4 }, Die { size: 6, value: 1} ], vec![Die { size: 4, value: 2 }]],
+            dice: vec![vec![die(4, 4), die(6, 1) ], vec![die(4, 2)]],
             ..Default::default()
         });
 
@@ -686,7 +720,7 @@ mod tests {
         assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
         assert_eq!(game.current_player, 1);
         // NOTE: The attacker's die is re-rolled. It's deterministic in tests
-        assert_eq!(game.dice, vec![vec![Die { size: 4, value: 2 }, Die { size: 6, value: 1 }], vec![]]);
+        assert_eq!(game.dice, vec![vec![die(4, 2), die(6, 1)], vec![]]);
         assert_eq!(game.captured, vec![vec![4], vec![]]);
     }
 
@@ -697,7 +731,7 @@ mod tests {
             id: "1".to_string(),
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
-            dice: vec![vec![Die { size: 4, value: 2 }, Die { size: 6, value: 4 }], vec![Die { size: 10, value: 6 }]],
+            dice: vec![vec![die(4, 2), die(6, 4)], vec![die(10, 6)]],
             ..Default::default()
         });
 
@@ -706,7 +740,7 @@ mod tests {
         let game = contract.games.get(&"1".to_string()).unwrap();
         assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
         assert_eq!(game.current_player, 1);
-        assert_eq!(game.dice, vec![vec![Die { size: 4, value: 2 }, Die { size: 6, value: 4 }], vec![]]);
+        assert_eq!(game.dice, vec![vec![die(4, 2), die(6, 4)], vec![]]);
         assert_eq!(game.captured, vec![vec![10], vec![]]);
     }
 
@@ -717,7 +751,7 @@ mod tests {
             id: "1".to_string(),
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 1,
-            dice: vec![vec![Die { size: 4, value: 4 }, Die { size: 6, value: 1} ], vec![Die { size: 4, value: 3 }]],
+            dice: vec![vec![die(4, 4), die(6, 1) ], vec![die(4, 3)]],
             ..Default::default()
         });
 
@@ -728,7 +762,7 @@ mod tests {
         assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
         assert_eq!(game.current_player, 0);
         // NOTE: The attacker's die is re-rolled. It's deterministic in tests
-        assert_eq!(game.dice, vec![vec![Die { size: 4, value: 4 }], vec![Die { size: 4, value: 2 }]]);
+        assert_eq!(game.dice, vec![vec![die(4, 4)], vec![die(4, 2)]]);
         assert_eq!(game.captured, vec![vec![], vec![6]]);
     }
 
@@ -764,7 +798,7 @@ mod tests {
             id: "1".to_string(),
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
-            dice: vec![vec![Die { size: 4, value: 1 }, Die { size: 6, value: 4} ], vec![Die { size: 4, value: 2 }]],
+            dice: vec![vec![die(4, 1), die(6, 4) ], vec![die(4, 2)]],
             ..Default::default()
         });
 
@@ -780,8 +814,8 @@ mod tests {
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
             dice: vec![
-                vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1 }, Die { size: 10, value: 2 }],
-                vec![Die { size: 4, value: 3 }, Die { size: 8, value: 6 }]],
+                vec![die(4, 1), die(6, 1), die(10, 2)],
+                vec![die(4, 3), die(8, 6)]],
             ..Default::default()
         });
 
@@ -796,8 +830,8 @@ mod tests {
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
             dice: vec![
-                vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1} ],
-                vec![Die { size: 4, value: 3 }]],
+                vec![die(4, 1), die(6, 1) ],
+                vec![die(4, 3)]],
             ..Default::default()
         });
 
@@ -807,8 +841,8 @@ mod tests {
         assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
         assert_eq!(game.current_player, 1);
         assert_eq!(game.dice, vec![
-            vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1} ],
-            vec![Die { size: 4, value: 3 }]]);
+            vec![die(4, 1), die(6, 1) ],
+            vec![die(4, 3)]]);
         assert_eq!(game.captured, vec![vec![], vec![]] as Vec<Vec<u8>>);
     }
 
@@ -852,7 +886,7 @@ mod tests {
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
             dice: vec![
-                vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1} ],
+                vec![die(4, 1), die(6, 1) ],
                 vec![]],
             captured: vec![vec![4, 6, 10], vec![10]],
             ..Default::default()
@@ -865,8 +899,8 @@ mod tests {
         assert_eq!(game.round, 2);
         assert_eq!(game.current_player, 1);
         assert_eq!(game.dice, vec![
-            vec![Die { size: 4, value: 2 }, Die { size: 6, value: 4 }, Die { size: 8, value: 5 }, Die { size: 10, value: 5}, Die { size: 20, value: 5 }],
-            vec![Die { size: 4, value: 2 }, Die { size: 6, value: 3 }, Die { size: 8, value: 2 }, Die { size: 10, value: 1 }, Die { size: 20, value: 5 }]]);
+            vec![die(4, 2), die(6, 4), die(8, 5), die(10, 5), die(20, 5)],
+            vec![die(4, 2), die(6, 3), die(8, 2), die(10, 1), die(20, 5)]]);
         assert_eq!(game.captured, vec![vec![], vec![]] as Vec<Vec<u8>>);
     }
 
@@ -915,7 +949,7 @@ mod tests {
                         "players": ["bob.near", ""],
                         "current_player": 0xff,
                         "dice": [
-                            [{"size": 4, "value": 2}, {"size": 6, "value": 4}, {"size": 8, "value": 5}, {"size": 10, "value": 5}, {"size": 20, "value": 5}],
+                            [{"kind": "Normal", "size": 4, "value": 2}, {"kind": "Normal", "size": 6, "value": 4}, {"kind": "Normal", "size": 8, "value": 5}, {"kind": "Normal", "size": 10, "value": 5}, {"kind": "Normal", "size": 20, "value": 5}],
                             []
                         ],
                         "captured": [[], []],
@@ -935,8 +969,8 @@ mod tests {
             players: vec!["bob.near".to_string(), "alice.near".to_string()],
             current_player: 0,
             dice: vec![
-                vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1} ],
-                vec![Die { size: 4, value: 3 }]],
+                vec![die(4, 1), die(6, 1)],
+                vec![die(4, 3)]],
             ..Default::default()
         });
 
@@ -950,8 +984,8 @@ mod tests {
                         "players": ["bob.near", "alice.near"],
                         "current_player": 0,
                         "dice": [
-                            [{"size": 4, "value": 1}, {"size": 6, "value": 1}],
-                            [{"size": 4, "value": 3}]
+                            [{"kind": "Normal", "size": 4, "value": 1}, {"kind": "Normal", "size": 6, "value": 1}],
+                            [{"kind": "Normal", "size": 4, "value": 3}]
                         ],
                         "captured": [[], []],
                         "is_pass_allowed": true,
