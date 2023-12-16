@@ -231,6 +231,26 @@ impl Contract {
         return game_id;
     }
 
+    fn determine_starting_player(&self, dice: Vec<Vec<Die>>) -> u8 {
+        // Sorted dice from lowest to highest for every player
+        let sorted_dice = dice.iter().cloned().map(|mut dice| {
+            dice.sort_by(|a, b| a.value.cmp(&b.value));
+            dice
+        }).collect::<Vec<Vec<Die>>>();
+
+        // Whoever rolled the single lowest number will go first.
+        // If the lowest dice are tied, compare the next lowest dice,
+        // and so on until a starting player is determined.
+        // TODO: If all numbers are tied, the round is a draw.
+        for i in 0..sorted_dice[0].len() {
+            if sorted_dice[1][i].value < sorted_dice[0][i].value {
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+
     pub fn join_game(&mut self, game_id: String) -> () {
         let player_id = env::predecessor_account_id().to_string();
 
@@ -250,25 +270,8 @@ impl Contract {
                         let mut rng = Rng::new(&env::random_seed());
                         game.dice[player_index] = roll_dice(&mut rng, vec![4, 6, 8, 10, 20]);
 
-                        // Sorted dice from lowest to highest for every player
-                        let sorted_dice = game.dice.iter().cloned().map(|mut dice| {
-                            dice.sort_by(|a, b| a.value.cmp(&b.value));
-                            dice
-                        }).collect::<Vec<Vec<Die>>>();
-
-                        // Whoever rolled the single lowest number will go first.
-                        // If the lowest dice are tied, compare the next lowest dice,
-                        // and so on until a starting player is determined.
                         // TODO: If all numbers are tied, the round is a draw.
-                        game.current_player = 0;
-                        'outer: for i in 0..sorted_dice[0].len() {
-                            for player in 0..sorted_dice.len() {
-                                if sorted_dice[player][i].value < sorted_dice[game.current_player as usize][i].value {
-                                    game.current_player = player as u8;
-                                    break 'outer;
-                                }
-                            }
-                        }
+                        game.current_player = self.determine_starting_player(game.dice.clone());
 
                         // Update the game state
                         self.games.insert(&game_id, &game);
@@ -334,12 +337,41 @@ impl Contract {
 
                 // Check win condition
                 if game.dice[defender_dice_idx].len() == 0 {
-                    // TODO: End game
+                    // TODO: End game round?
                 }
 
                 // Update the game state
                 self.games.insert(&game_id, &game);
             },
+            None => {
+                panic!("Game not found: {}", game_id);
+            }
+        }
+    }
+
+    pub fn next_round(&mut self, game_id: String) -> () {
+        let player_id = env::predecessor_account_id().to_string();
+
+        match self.games.get(&game_id) {
+            Some(mut game) => {
+                game.players.iter().any(|p| p == &player_id) || panic!("Player {} has not joined game {}", player_id, game_id);
+
+                if game.dice.iter().all(|dice| dice.len() > 0) {
+                    panic!("Round is not over yet");
+                }
+
+                game.round += 1;
+                let mut rng = Rng::new(&env::random_seed());
+                // TODO: Store dice types separately? Associate with "button" / character?
+                // TODO: Roll dice according to character sheet
+                // game.dice = game.dice.iter().map(|dice| roll_dice(&mut rng, dice.iter().map(|die| die.size).collect())).collect();
+                game.captured = vec![vec![], vec![]];
+                // game.current_player = self.determine_starting_player(game.dice.clone());
+
+                // TODO: Fix rolling dice for the next round
+
+                self.games.insert(&game_id, &game);
+            }
             None => {
                 panic!("Game not found: {}", game_id);
             }
@@ -777,6 +809,64 @@ mod tests {
         assert_eq!(game.dice, vec![
             vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1} ],
             vec![Die { size: 4, value: 3 }]]);
+        assert_eq!(game.captured, vec![vec![], vec![]] as Vec<Vec<u8>>);
+    }
+
+    #[test]
+    #[should_panic(expected = "Round is not over yet")]
+    fn next_round_not_over_yet() {
+        let mut contract = Contract::default();
+        contract.create_game();
+
+        login_as("alice.near");
+        contract.join_game("1".to_string());
+        contract.next_round("1".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Player eve.near has not joined game 1")]
+    fn next_round_not_joined() {
+        let mut contract = Contract::default();
+        contract.create_game();
+
+        login_as("alice.near");
+        contract.join_game("1".to_string());
+
+        login_as("eve.near");
+        contract.next_round("1".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Game not found: 1")]
+    fn next_round_not_found() {
+        let mut contract = Contract::default();
+        contract.next_round("1".to_string());
+    }
+
+    #[test]
+    fn next_round_success() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
+            round: 1,
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![
+                vec![Die { size: 4, value: 1 }, Die { size: 6, value: 1} ],
+                vec![]],
+            captured: vec![vec![4, 6, 10], vec![10]],
+            ..Default::default()
+        });
+
+        contract.next_round("1".to_string());
+
+        let game = contract.games.get(&"1".to_string()).unwrap();
+        assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
+        assert_eq!(game.round, 2);
+        assert_eq!(game.current_player, 1);
+        assert_eq!(game.dice, vec![
+            vec![Die { size: 4, value: 2 }, Die { size: 6, value: 4 }, Die { size: 8, value: 5 }, Die { size: 10, value: 5}, Die { size: 20, value: 5 }],
+            vec![Die { size: 4, value: 2 }, Die { size: 6, value: 3 }, Die { size: 8, value: 2 }, Die { size: 10, value: 1 }, Die { size: 20, value: 5 }]]);
         assert_eq!(game.captured, vec![vec![], vec![]] as Vec<Vec<u8>>);
     }
 
