@@ -96,6 +96,10 @@ const Game = ({ gameId }) => {
   const [selectedDice, setSelectedDice] = useState([]); // To store indices of selected dice for an attack
   const [selectedDefenderDie, setSelectedDefenderDie] = useState(null); // Index of selected defender die
 
+  // Progress indicators
+  const [attacking, setAttacking] = useState(false);
+  const [passing, setPassing] = useState(false);
+
   const gameState = usePolling([gameId], `/api/games/${gameId}/status`);
 
   const attack = async (attackerDieIndices, defenderDieIndex) => {
@@ -103,7 +107,15 @@ const Game = ({ gameId }) => {
   };
 
   const pass = async () => {
-    await post(`/web4/contract/${contractId}/pass`, { game_id: gameId });
+    try {
+      setPassing(true);
+      await post(`/web4/contract/${contractId}/pass`, { game_id: gameId });
+    } catch (e) {
+      console.error(e);
+      alert('Pass failed');
+    } finally {
+      setPassing(false);
+    }
   }
 
   const selectDieForAttack = (index) => {
@@ -127,7 +139,16 @@ const Game = ({ gameId }) => {
       return;
     }
 
-    await attack(selectedDice, selectedDefenderDie);
+    try {
+      setAttacking(true);
+      await attack(selectedDice, selectedDefenderDie);
+    } catch (e) {
+      console.error(e);
+      alert('Attach failed');
+    } finally {
+      setAttacking(false);
+    }
+
     // Reset selection after attack
     setSelectedDice([]);
     setSelectedDefenderDie(null);
@@ -176,8 +197,10 @@ const Game = ({ gameId }) => {
           : renderDice(gameState.dice[otherPlayerIndex], gameState.players[otherPlayerIndex], gameState.current_player === otherPlayerIndex, gameState.captured[otherPlayerIndex])}
       </div>
 
-      <button onClick={performAttack} disabled={gameState.players[gameState.current_player] !== playerId}>Attack</button>
-      <button onClick={pass} disabled={gameState.players[gameState.current_player] !== playerId || !gameState.is_pass_allowed}>Pass</button>
+      {attacking && <p>Attacking...</p>}
+      {!attacking && <button onClick={performAttack} disabled={gameState.players[gameState.current_player] !== playerId}>Attack</button>}
+      {passing && <p>Passing...</p>}
+      {!passing && <button onClick={pass} disabled={gameState.players[gameState.current_player] !== playerId || !gameState.is_pass_allowed}>Pass</button>}
 
       <AwaitingTurnGamesList gameId={gameId} />
     </div>
