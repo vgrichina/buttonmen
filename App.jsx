@@ -168,10 +168,10 @@ const Game = ({ gameId }) => {
   return (
     <div>
       <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
-      <div class="this-player">
+      <div className="this-player">
         {renderDice(gameState.dice[currentPlayerIndex], gameState.players[currentPlayerIndex], gameState.current_player === currentPlayerIndex, gameState.captured[currentPlayerIndex])}
       </div>
-      <div class="other-player">
+      <div className="other-player">
         {gameState.players[otherPlayerIndex] == '' ? <p><b>Waiting for player to join...</b></p>
           : renderDice(gameState.dice[otherPlayerIndex], gameState.players[otherPlayerIndex], gameState.current_player === otherPlayerIndex, gameState.captured[otherPlayerIndex])}
       </div>
@@ -182,14 +182,6 @@ const Game = ({ gameId }) => {
       <AwaitingTurnGamesList gameId={gameId} />
     </div>
   );
-};
-
-const createGame = async () => {
-  const gameId = await post(`/web4/contract/${contractId}/create_game`);
-
-  console.log('Created game', gameId);
-  // TODO: Push state to history instead?
-  window.location.href = `/games/${gameId}`;
 };
 
 const LoggedInBanner = () => (
@@ -214,13 +206,32 @@ const App = () => {
     );
   }
 
+  const [creatingGame, setCreatingGame] = useState(false);
+
   const path = window.location.pathname;
   const parts = path.split('/');
+
+  const createGame = async () => {
+    setCreatingGame(true);
+    try {
+      const gameId = await post(`/web4/contract/${contractId}/create_game`);
+
+      console.log('Created game', gameId);
+      // TODO: Push state to history instead?
+      window.location.href = `/games/${gameId}`;
+    } catch (e) {
+      console.error(e);
+      alert('Failed to create game');
+    } finally {
+      setCreatingGame(false);
+    }
+  };
 
   if (path === '/') {
     return <>
       <LoggedInBanner />
-      <button onClick={createGame}>Create Game</button>
+      {creatingGame && <p>Creating game...</p>}
+      {!creatingGame && <button onClick={createGame}>Create game</button>}
       <LatestGamesList />
 
       <AwaitingTurnGamesList />
