@@ -7,6 +7,82 @@ use near_rng::Rng;
 
 const MAX_LATEST_GAMES: usize = 10;
 
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Die {
+    size: u8,
+    value: u8
+
+    // TODO: DieType enum?
+}
+
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Game {
+    id: String,
+    players: Vec<String>,
+    current_player: u8,
+    dice: Vec<Vec<Die>>,
+    captured: Vec<Vec<u8>>,
+    round: u8,
+    scores: Vec<Vec<Vec<u8>>>,
+
+    // NOTE: This is reserved for future upgrades, can be replaced with enum later
+    reserved: Option<()>,
+}
+
+impl Default for Game {
+    fn default() -> Self {
+        Self {
+            id: "".to_string(),
+            players: vec![],
+            current_player: 0,
+            dice: vec![vec![], vec![]],
+            captured: vec![vec![], vec![]],
+            round: 0,
+            scores: vec![],
+            reserved: None,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct GameView {
+    id: String,
+    players: Vec<String>,
+    current_player: u8,
+    dice: Vec<Vec<Die>>,
+    captured: Vec<Vec<u8>>,
+
+    // TODO: Copy other fields from Game
+
+    is_pass_allowed: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Player {
+    id: String,
+    games: Vec<String>,
+
+    // TODO: more fields. Track wins / etc?
+
+
+    // NOTE: This is reserved for future upgrades, can be replaced with enum later
+    reserved: Option<()>,
+}
+
+impl Default for Player {
+    fn default() -> Self {
+        Self {
+            id: "".to_string(),
+            games: vec![],
+            reserved: None,
+        }
+    }
+}
+
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct Contract {
@@ -430,82 +506,6 @@ pub enum Web4Response {
         #[serde(rename = "preloadUrls")]
         preload_urls: Vec<String>,
     },
-}
-
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq, Clone)]
-#[serde(crate = "near_sdk::serde")]
-pub struct Die {
-    size: u8,
-    value: u8
-
-    // TODO: DieType enum?
-}
-
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
-#[serde(crate = "near_sdk::serde")]
-pub struct Game {
-    id: String,
-    players: Vec<String>,
-    current_player: u8,
-    dice: Vec<Vec<Die>>,
-    captured: Vec<Vec<u8>>,
-    round: u8,
-    scores: Vec<Vec<Vec<u8>>>,
-
-    // NOTE: This is reserved for future upgrades, can be replaced with enum later
-    reserved: Option<()>,
-}
-
-impl Default for Game {
-    fn default() -> Self {
-        Self {
-            id: "".to_string(),
-            players: vec![],
-            current_player: 0,
-            dice: vec![vec![], vec![]],
-            captured: vec![vec![], vec![]],
-            round: 0,
-            scores: vec![],
-            reserved: None,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-pub struct GameView {
-    id: String,
-    players: Vec<String>,
-    current_player: u8,
-    dice: Vec<Vec<Die>>,
-    captured: Vec<Vec<u8>>,
-
-    // TODO: Copy other fields from Game
-
-    is_pass_allowed: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
-#[serde(crate = "near_sdk::serde")]
-pub struct Player {
-    id: String,
-    games: Vec<String>,
-
-    // TODO: more fields. Track wins / etc?
-
-
-    // NOTE: This is reserved for future upgrades, can be replaced with enum later
-    reserved: Option<()>,
-}
-
-impl Default for Player {
-    fn default() -> Self {
-        Self {
-            id: "".to_string(),
-            games: vec![],
-            reserved: None,
-        }
-    }
 }
 
 #[cfg(test)]
