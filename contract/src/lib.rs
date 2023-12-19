@@ -93,13 +93,33 @@ impl Game {
     }
 
     pub fn is_game_over(&self) -> bool {
-        // TODO: Implement
-        false
+        // The first player to win three rounds wins the match.
+
+        if self.round < 3 {
+            return false;
+        }
+
+        let wins_by_player = (0..self.round).fold([0, 0], |mut wins, round| {
+            if let Some(winner) = self.find_round_winner_idx(round) {
+                wins[winner] += 1;
+            }
+            wins
+        });
+
+        if wins_by_player.iter().any(|wins| *wins >= 3) {
+            return true;
+        }
+
+        return false;
     }
 
     pub fn is_pass_allowed(&self) -> bool {
         if self.current_player as usize > self.players.len() {
             // Game not started yet
+            return false;
+        }
+
+        if self.is_round_over() {
             return false;
         }
 
@@ -114,6 +134,24 @@ impl Game {
         }
 
         return true;
+    }
+
+    fn find_round_winner_idx(&self, round: u8) -> Option<usize> {
+        // Round winner is the player with most score in that round.
+        // If both players have the same score, the round is a draw and is not counted.
+
+        if !self.is_round_over() {
+            return None;
+        }
+
+        let round_scores = &self.scores[round as usize];
+        let max_score = round_scores.iter().max().unwrap();
+        let max_score_count = round_scores.iter().filter(|score| *score == max_score).count();
+        if max_score_count > 1 {
+            return None;
+        }
+
+        return Some(round_scores.iter().position(|score| score == max_score).unwrap());
     }
 
     fn find_power_attack(&self) -> Option<(usize, usize)> {
@@ -183,12 +221,15 @@ pub struct GameView {
     id: String,
     players: Vec<String>,
     current_player: u8,
+    starting_dice: Vec<Vec<Die>>,
     dice: Vec<Vec<DieRoll>>,
     captured: Vec<Vec<u8>>,
-
-    // TODO: Copy other fields from Game
+    round: u8,
+    scores: Vec<Vec<u8>>,
 
     is_pass_allowed: bool,
+    is_round_over: bool,
+    is_game_over: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
@@ -277,9 +318,14 @@ impl Contract {
                         id: game.id.clone(),
                         players: game.players.clone(),
                         current_player: game.current_player,
+                        starting_dice: game.starting_dice.clone(),
                         dice: game.dice.clone(),
                         captured: game.captured.clone(),
+                        round: game.round,
+                        scores: game.scores.clone(),
                         is_pass_allowed: game.is_pass_allowed(),
+                        is_round_over: game.is_round_over(),
+                        is_game_over: game.is_game_over(),
                     };
                     return Web4Response::Body {
                         content_type: "application/json".to_owned(),
@@ -977,12 +1023,19 @@ mod tests {
                         "id": game_id,
                         "players": ["bob.near", ""],
                         "current_player": 0xff,
+                        "starting_dice": [
+                            [{"kind": "Normal", "size": 4}, {"kind": "Normal", "size": 6}, {"kind": "Normal", "size": 8}, {"kind": "Normal", "size": 10}, {"kind": "Normal", "size": 20}],
+                            []],
                         "dice": [
                             [{"kind": "Normal", "size": 4, "value": 2}, {"kind": "Normal", "size": 6, "value": 4}, {"kind": "Normal", "size": 8, "value": 5}, {"kind": "Normal", "size": 10, "value": 5}, {"kind": "Normal", "size": 20, "value": 5}],
                             []
                         ],
                         "captured": [[], []],
+                        "round": 0,
+                        "scores": [],
                         "is_pass_allowed": false,
+                        "is_round_over": true,
+                        "is_game_over": false,
                     })).unwrap());
 
             },
@@ -1012,12 +1065,64 @@ mod tests {
                         "id": "1",
                         "players": ["bob.near", "alice.near"],
                         "current_player": 0,
+                        "starting_dice": [
+                            [{"kind": "Normal", "size": 4}, {"kind": "Normal", "size": 6}, {"kind": "Normal", "size": 8}, {"kind": "Normal", "size": 10}, {"kind": "Normal", "size": 20}],
+                            [{"kind": "Normal", "size": 4}, {"kind": "Normal", "size": 6}, {"kind": "Normal", "size": 8}, {"kind": "Normal", "size": 10}, {"kind": "Normal", "size": 20}]
+                        ],
                         "dice": [
                             [{"kind": "Normal", "size": 4, "value": 1}, {"kind": "Normal", "size": 6, "value": 1}],
                             [{"kind": "Normal", "size": 4, "value": 3}]
                         ],
                         "captured": [[], []],
+                        "round": 0,
+                        "scores": [],
                         "is_pass_allowed": true,
+                        "is_round_over": false,
+                        "is_game_over": false,
+                    })).unwrap());
+            },
+            _ => panic!("Unexpected response"),
+        }
+    }
+
+    #[test]
+    fn web4_get_game_state_game_over() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![
+                vec![die(4, 1), die(6, 1)],
+                vec![]],
+            round: 5,
+            scores: vec![vec![20, 10], vec![10, 20], vec![20, 10], vec![10, 20], vec![10, 20]],
+            ..Default::default()
+        });
+
+        let response = contract.web4_get(request_path(&format!("/api/games/1")));
+        match response {
+            Web4Response::Body { content_type, body } => {
+                assert_eq!(content_type, "application/json".to_owned());
+                assert_eq!(String::from_utf8(body.into()).unwrap(),
+                    serde_json::to_string(&serde_json::json!({
+                        "id": "1",
+                        "players": ["bob.near", "alice.near"],
+                        "current_player": 0,
+                        "starting_dice": [
+                            [{"kind": "Normal", "size": 4}, {"kind": "Normal", "size": 6}, {"kind": "Normal", "size": 8}, {"kind": "Normal", "size": 10}, {"kind": "Normal", "size": 20}],
+                            [{"kind": "Normal", "size": 4}, {"kind": "Normal", "size": 6}, {"kind": "Normal", "size": 8}, {"kind": "Normal", "size": 10}, {"kind": "Normal", "size": 20}]
+                        ],
+                        "dice": [
+                            [{"kind": "Normal", "size": 4, "value": 1}, {"kind": "Normal", "size": 6, "value": 1}],
+                            []
+                        ],
+                        "captured": [[], []],
+                        "round": 5,
+                        "scores": [[20, 10], [10, 20], [20, 10], [10, 20], [10, 20]],
+                        "is_pass_allowed": false,
+                        "is_round_over": true,
+                        "is_game_over": true,
                     })).unwrap());
             },
             _ => panic!("Unexpected response"),
