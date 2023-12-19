@@ -533,7 +533,7 @@ impl Contract {
                     panic!("Player {} has not joined game {}", player_id, game_id);
                 }
 
-                if game.dice.iter().all(|dice| dice.len() > 0) {
+                if !game.is_round_over() {
                     panic!("Round is not over yet");
                 }
 
