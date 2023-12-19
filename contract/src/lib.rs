@@ -65,7 +65,7 @@ pub struct Game {
     dice: Vec<Vec<DieRoll>>,
     captured: Vec<Vec<u8>>,
     round: u8,
-    scores: Vec<Vec<Vec<u8>>>,
+    scores: Vec<Vec<u8>>,
 
     // NOTE: This is reserved for future upgrades, can be replaced with enum later
     reserved: Option<()>,
@@ -405,6 +405,7 @@ impl Contract {
                 game.round += 1;
                 let mut rng = Rng::new(&env::random_seed());
                 game.dice = game.starting_dice.iter().map(|dice| roll_dice(&mut rng, dice.clone())).collect();
+                game.scores.push(game.captured.iter().map(|captured| captured.iter().fold(0, |acc, size| acc + *size as u8)).collect());
                 game.captured = vec![vec![], vec![]];
                 game.current_player = self.determine_starting_player(game.dice.clone());
 
@@ -912,11 +913,12 @@ mod tests {
         let game = contract.games.get(&"1".to_string()).unwrap();
         assert_eq!(game.players, vec!["bob.near".to_string(), "alice.near".to_string()]);
         assert_eq!(game.round, 2);
-        // assert_eq!(game.current_player, 1);
+        assert_eq!(game.current_player, 1);
         assert_eq!(game.dice, vec![
             vec![die(4, 2), die(6, 4), die(8, 5), die(10, 5), die(20, 5)],
             vec![die(4, 2), die(6, 2), die(8, 1), die(10, 4), die(20, 3)]]);
         assert_eq!(game.captured, vec![vec![], vec![]] as Vec<Vec<u8>>);
+        assert_eq!(game.scores, vec![vec![20, 10]]);
     }
 
     fn request_path(path: &str) -> Web4Request {
