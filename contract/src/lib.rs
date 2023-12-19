@@ -483,6 +483,10 @@ impl Contract {
                     panic!("It is not your turn");
                 }
 
+                if game.is_round_over() {
+                    panic!("Round is over");
+                }
+
                 let attacker_dice_idx = game.current_player as usize;
                 let defender_dice_idx = (game.current_player + 1) as usize % 2;
 
@@ -510,11 +514,6 @@ impl Contract {
                 });
                 // Switch to the next player
                 game.current_player = (game.current_player + 1) % 2;
-
-                // Check win condition
-                if game.dice[defender_dice_idx].len() == 0 {
-                    // TODO: End game round?
-                }
 
                 // Update the game state
                 self.games.insert(&game_id, &game);
@@ -758,6 +757,22 @@ mod tests {
         contract.join_game("1".to_string(), DEFAULT_DICE.to_vec());
 
         login_as("eve.near");
+        contract.attack("1".to_string(), vec![0], 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Round is over")]
+    fn attack_failed_round_is_over() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![vec![die(4, 1)], vec![]],
+            ..Default::default()
+        });
+
+        login_as("bob.near");
         contract.attack("1".to_string(), vec![0], 0);
     }
 
