@@ -374,6 +374,16 @@ impl Contract {
         }
     }
 
+    #[init(ignore_state)]
+    pub fn migrate() -> Self {
+        require_owner();
+
+
+        // Ok to just reset the state for now
+        // TODO: Migration logic when in prod
+        Self::default()
+    }
+
     pub fn create_game(&mut self, starting_dice: Vec<Die>) -> String {
         self.last_game_id += 1;
         let game_id = format!("{}", self.last_game_id);
@@ -587,11 +597,15 @@ impl Contract {
 
     // TODO: Move this to a separate trait together with serve_static
     pub fn web4_setStaticUrl(&mut self, url: String) -> () {
-        // TODO: Allow to set owner like in https://github.com/near/near-sdk-rs/blob/00226858199419aaa8c99f756bd192851666fb36/near-contract-standards/src/upgrade/mod.rs#L7
-        require!(env::predecessor_account_id() == env::current_account_id(), "Only owner can set static URL");
+        require_owner();
 
         self.web4_static_url = url;
     }
+}
+
+fn require_owner() {
+    // TODO: Allow to set owner like in https://github.com/near/near-sdk-rs/blob/00226858199419aaa8c99f756bd192851666fb36/near-contract-standards/src/upgrade/mod.rs#L7
+    require!(env::predecessor_account_id() == env::current_account_id(), "Only owner can set static URL");
 }
 
 fn roll_die(rng: &mut Rng, die: &Die) -> DieRoll {
