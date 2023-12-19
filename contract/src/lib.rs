@@ -87,6 +87,96 @@ impl Default for Game {
     }
 }
 
+impl Game {
+    pub fn is_round_over(&self) -> bool {
+        self.dice.iter().any(|dice| dice.len() == 0)
+    }
+
+    pub fn is_game_over(&self) -> bool {
+        // TODO: Implement
+        false
+    }
+
+    pub fn is_pass_allowed(&self) -> bool {
+        if self.current_player as usize > self.players.len() {
+            // Game not started yet
+            return false;
+        }
+
+        let power_attack = self.find_power_attack();
+        if power_attack.is_some() {
+            return false;
+        }
+
+        let skill_attack = self.find_skill_attack();
+        if skill_attack.is_some() {
+            return false;
+        }
+
+        return true;
+    }
+
+    fn find_power_attack(&self) -> Option<(usize, usize)> {
+        let current_player_index = self.current_player as usize;
+        let other_player_index = (self.current_player as usize + 1) % 2;
+
+        // Verify that power attack is not possible
+        for attacker_die_index in 0..self.dice[current_player_index].len() {
+            for defender_die_index in 0..self.dice[other_player_index].len() {
+                if self.dice[current_player_index][attacker_die_index].value >= self.dice[other_player_index][defender_die_index].value {
+                    return Some((attacker_die_index, defender_die_index));
+                }
+            }
+        }
+
+        return None;
+    }
+
+    fn find_skill_attack(&self) -> Option<(Vec<u8>, u8)> {
+        let current_player_index = self.current_player as usize;
+        let other_player_index = (self.current_player as usize + 1) % 2;
+
+        fn find_skill_attack_recursive(attacker_dice_values: &[u8], defender_die_value: u8, selected_attacker_dice: Vec<u8>) -> Option<Vec<u8>> {
+            if attacker_dice_values.len() == 0 {
+                if defender_die_value == 0 {
+                    return Some(selected_attacker_dice);
+                } else {
+                    return None;
+                }
+            }
+
+            if let Some(result) = find_skill_attack_recursive(&attacker_dice_values[1..], defender_die_value, selected_attacker_dice.clone()) {
+                return Some(result);
+            }
+
+            if defender_die_value >= attacker_dice_values[0] {
+                if let Some(result) = find_skill_attack_recursive(&attacker_dice_values[1..], defender_die_value - attacker_dice_values[0], {
+                    let mut selected_attacker_dice = selected_attacker_dice.clone();
+                    selected_attacker_dice.push(0);
+                    selected_attacker_dice
+                }) {
+                    return Some(result);
+                }
+            }
+
+            return None;
+        }
+
+        // Verify that skill attack is not possible
+        for defender_die_index in 0..self.dice[other_player_index].len() {
+            let defender_die_value = self.dice[other_player_index][defender_die_index].value;
+            let attacker_dice_values = self.dice[current_player_index].iter().map(|die| die.value).collect::<Vec<u8>>();
+
+            let result = find_skill_attack_recursive(&attacker_dice_values, defender_die_value, vec![]);
+            if result.is_some() {
+                return Some((result.unwrap(), defender_die_value));
+            }
+        }
+
+        return None;
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct GameView {
@@ -189,7 +279,7 @@ impl Contract {
                         current_player: game.current_player,
                         dice: game.dice.clone(),
                         captured: game.captured.clone(),
-                        is_pass_allowed: self.is_pass_allowed(&game),
+                        is_pass_allowed: game.is_pass_allowed(),
                     };
                     return Web4Response::Body {
                         content_type: "application/json".to_owned(),
@@ -417,84 +507,6 @@ impl Contract {
         }
     }
 
-    fn find_power_attack(game: &Game) -> Option<(usize, usize)> {
-        let current_player_index = game.current_player as usize;
-        let other_player_index = (game.current_player as usize + 1) % 2;
-
-        // Verify that power attack is not possible
-        for attacker_die_index in 0..game.dice[current_player_index].len() {
-            for defender_die_index in 0..game.dice[other_player_index].len() {
-                if game.dice[current_player_index][attacker_die_index].value >= game.dice[other_player_index][defender_die_index].value {
-                    return Some((attacker_die_index, defender_die_index));
-                }
-            }
-        }
-
-        return None;
-    }
-
-    fn find_skill_attack(game: &Game) -> Option<(Vec<u8>, u8)> {
-        let current_player_index = game.current_player as usize;
-        let other_player_index = (game.current_player as usize + 1) % 2;
-
-        fn find_skill_attack_recursive(attacker_dice_values: &[u8], defender_die_value: u8, selected_attacker_dice: Vec<u8>) -> Option<Vec<u8>> {
-            if attacker_dice_values.len() == 0 {
-                if defender_die_value == 0 {
-                    return Some(selected_attacker_dice);
-                } else {
-                    return None;
-                }
-            }
-
-            if let Some(result) = find_skill_attack_recursive(&attacker_dice_values[1..], defender_die_value, selected_attacker_dice.clone()) {
-                return Some(result);
-            }
-
-            if defender_die_value >= attacker_dice_values[0] {
-                if let Some(result) = find_skill_attack_recursive(&attacker_dice_values[1..], defender_die_value - attacker_dice_values[0], {
-                    let mut selected_attacker_dice = selected_attacker_dice.clone();
-                    selected_attacker_dice.push(0);
-                    selected_attacker_dice
-                }) {
-                    return Some(result);
-                }
-            }
-
-            return None;
-        }
-
-        // Verify that skill attack is not possible
-        for defender_die_index in 0..game.dice[other_player_index].len() {
-            let defender_die_value = game.dice[other_player_index][defender_die_index].value;
-            let attacker_dice_values = game.dice[current_player_index].iter().map(|die| die.value).collect::<Vec<u8>>();
-
-            let result = find_skill_attack_recursive(&attacker_dice_values, defender_die_value, vec![]);
-            if result.is_some() {
-                return Some((result.unwrap(), defender_die_value));
-            }
-        }
-
-        return None;
-    }
-
-    fn is_pass_allowed(&self, game: &Game) -> bool {
-        if game.current_player as usize > game.players.len() {
-            // Game not started yet
-            return false;
-        }
-
-        let power_attack = Self::find_power_attack(game);
-        if power_attack.is_some() {
-            return false;
-        }
-
-        let skill_attack = Self::find_skill_attack(game);
-        if skill_attack.is_some() {
-            return false;
-        }
-
-        return true;
-    }
 
     pub fn pass(&mut self, game_id: String) -> () {
         let player_id = env::predecessor_account_id().to_string();
@@ -506,12 +518,12 @@ impl Contract {
                     panic!("It is not your turn");
                 }
 
-                let power_attack = Self::find_power_attack(&game);
+                let power_attack = game.find_power_attack();
                 if power_attack.is_some() {
                     panic!("Power attack is possible");
                 }
 
-                let skill_attack = Self::find_skill_attack(&game);
+                let skill_attack = game.find_skill_attack();
                 if skill_attack.is_some() {
                     panic!("Skill attack is possible");
                 }
