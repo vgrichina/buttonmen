@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import Cookies from 'js-cookie';
 
+class APIError extends Error {
+  constructor(message, code, data) {
+    super(message);
+    this.code = code;
+    this.data = data;
+  }
+
+  toString() {
+    return `${this.message} code: ${this.code} data: ${JSON.stringify(this.data)}`;
+  }
+}
+
 const apiRequest = async (url, method, body) => {
   const response = await fetch(url, {
     method,
@@ -9,6 +21,14 @@ const apiRequest = async (url, method, body) => {
     },
     body: JSON.stringify(body),
   });
+
+  // Handle errors
+  if (!response.ok) {
+    // TODO: Handle non-JSON errors
+    const errorData = await response.json();
+    throw new APIError('API request failed', response.status, errorData);
+  }
+
   return response.json();
 };
 
@@ -18,6 +38,9 @@ const post = async (url, body) => apiRequest(url, 'POST', body);
 const playerId = Cookies.get('web4_account_id');
 const contractId = window._web4Config?.contractName;
 
+// TODO: Other dice types
+const die = (size) => ({ kind: "Normal", size });
+
 const Dice = ({ value, size }) => (
   <div>
     D{size}: {value}
@@ -25,7 +48,11 @@ const Dice = ({ value, size }) => (
 );
 
 const joinGame = async (gameId) => {
-  await post(`/web4/contract/${contractId}/join_game`, { game_id: gameId });
+  await post(`/web4/contract/${contractId}/join_game`, {
+    game_id: gameId,
+    // TODO: Let player choose dice set
+    starting_dice: [die(4), die(6), die(8), die(10), die(20)],
+  });
   window.location.href = `/games/${gameId}`;
 };
 
@@ -237,7 +264,10 @@ const App = () => {
   const createGame = async () => {
     setCreatingGame(true);
     try {
-      const gameId = await post(`/web4/contract/${contractId}/create_game`);
+      const gameId = await post(`/web4/contract/${contractId}/create_game`, {
+        // TODO: Let player choose dice set
+        starting_dice: [die(4), die(6), die(8), die(10), die(20)],
+      });
 
       console.log('Created game', gameId);
       // TODO: Push state to history instead?

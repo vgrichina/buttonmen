@@ -1,6 +1,6 @@
 use core::fmt::{Debug, Formatter};
 
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::borsh::{self, to_vec, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
 use near_sdk::{env, serde_json, near_bindgen, require};
 use near_sdk::serde::{Deserialize, Serialize};
@@ -398,7 +398,9 @@ impl Contract {
             ..Default::default()
         };
 
-        self.games.insert(&game_id, &game);
+        // NOTE: Using LookupMap::insert_raw to avoid deserializing old game state
+        self.games.insert_raw(&to_vec(&game_id).unwrap(), &to_vec(&game).unwrap());
+
         self.latest_games.push(game_id.clone());
         if self.latest_games.len() > MAX_LATEST_GAMES {
             self.latest_games.remove(0);
