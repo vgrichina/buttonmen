@@ -333,11 +333,11 @@ impl Contract {
                     }
                 },
                 None => {
-                    // if game does not exist, return 404
-                    // TODO: Support HTTP error codes in boilerplate
-                    return Web4Response::Body {
-                        content_type: "text/html; charset=UTF-8".to_owned(),
-                        body: "<h1>Game not found</h1>".as_bytes().to_owned().into(),
+                    // game does not exist
+                    return Web4Response::Error {
+                        status: 404,
+                        content_type: "text/plain".to_owned(),
+                        body: format!("Game not found: {}", game_id).as_bytes().to_owned().into(),
                     }
                 }
             }
@@ -361,7 +361,7 @@ impl Contract {
                 }
             }
 
-            // TODO: return 404?
+            return resource_not_found(request.path);
         }
 
 
@@ -634,6 +634,19 @@ pub enum Web4Response {
         #[serde(rename = "preloadUrls")]
         preload_urls: Vec<String>,
     },
+    Error {
+        status: u16,
+        content_type: String,
+        body: near_sdk::json_types::Base64VecU8,
+    }
+}
+
+fn resource_not_found(path: String) -> Web4Response {
+    Web4Response::Error {
+        status: 404,
+        content_type: "text/plain".to_owned(),
+        body: format!("Resource not found: {}", path).as_bytes().to_owned().into(),
+    }
 }
 
 #[cfg(test)]
@@ -1149,10 +1162,10 @@ mod tests {
         let contract = Contract::default();
 
         let response = contract.web4_get(request_path("/api/games/1"));
-        // TODO: JSON error?
-        assert_eq!(response, Web4Response::Body {
-            content_type: "text/html; charset=UTF-8".to_owned(),
-            body: "<h1>Game not found</h1>".as_bytes().to_owned().into(),
+        assert_eq!(response, Web4Response::Error{
+            status: 404,
+            content_type: "text/plain".to_owned(),
+            body: "Game not found: 1".as_bytes().to_owned().into(),
         });
     }
 
