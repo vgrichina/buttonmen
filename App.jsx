@@ -171,7 +171,7 @@ const Game = ({ gameId }) => {
       await attack(selectedDice, selectedDefenderDie);
     } catch (e) {
       console.error(e);
-      alert('Attach failed');
+      alert('Attack failed');
     } finally {
       setAttacking(false);
     }
@@ -225,7 +225,7 @@ const Game = ({ gameId }) => {
       </div>
 
       {attacking && <p>Attacking...</p>}
-      {!attacking && <button onClick={performAttack} disabled={gameState.players[gameState.current_player] !== playerId}>Attack</button>}
+      {!attacking && <button onClick={performAttack} disabled={gameState.players[gameState.current_player] !== playerId || gameState.is_pass_allowed}>Attack</button>}
       {passing && <p>Passing...</p>}
       {!passing && <button onClick={pass} disabled={gameState.players[gameState.current_player] !== playerId || !gameState.is_pass_allowed}>Pass</button>}
 
