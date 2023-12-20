@@ -65,7 +65,7 @@ const GameList = ({ games }) => (!games
           game.players.some(p => p == playerId)
             ? <a href={`/games/${game.id}`}>Resume</a>
             : (game.players.some(p => p == "")
-              ? <button onClick={() => joinGame(game.id)}>Join</button>
+              ? <ActionButton onClick={() => joinGame(game.id)} progressMessage="Joining..." failMessage="Failed to join">Join</ActionButton>
               : <a href={`/games/${game.id}`}>Spectate</a>)
         }
       </li>
@@ -119,31 +119,38 @@ const AwaitingTurnGamesList = ({ gameId }) => {
   );
 };
 
+const ActionButton = ({ onClick, disabled, children, progressMessage, failMessage }) => {
+  const [progress, setProgress] = useState(false);
+
+  const action = async () => {
+    setProgress(true);
+    try {
+      await onClick();
+    } catch (e) {
+      console.error(e);
+      alert(failMessage);
+    } finally {
+      setProgress(false);
+    }
+  }
+
+  if (progress) {
+    return <p>{progressMessage}</p>
+  }
+
+  return <button onClick={action} disabled={disabled}>{children}</button>
+};
+
 const Game = ({ gameId }) => {
   const [selectedDice, setSelectedDice] = useState([]); // To store indices of selected dice for an attack
   const [selectedDefenderDie, setSelectedDefenderDie] = useState(null); // Index of selected defender die
 
-  // Progress indicators
-  const [attacking, setAttacking] = useState(false);
-  const [passing, setPassing] = useState(false);
-
   const gameState = usePolling([gameId], `/api/games/${gameId}/status`);
 
-  const attack = async (attackerDieIndices, defenderDieIndex) => {
-    await post(`/web4/contract/${contractId}/attack`, { game_id: gameId, attacker_die_indices: attackerDieIndices, defender_die_index: defenderDieIndex });
-  };
+  const attack = (attackerDieIndices, defenderDieIndex) =>
+    post(`/web4/contract/${contractId}/attack`, { game_id: gameId, attacker_die_indices: attackerDieIndices, defender_die_index: defenderDieIndex });
 
-  const pass = async () => {
-    try {
-      setPassing(true);
-      await post(`/web4/contract/${contractId}/pass`, { game_id: gameId });
-    } catch (e) {
-      console.error(e);
-      alert('Pass failed');
-    } finally {
-      setPassing(false);
-    }
-  }
+  const pass = () => post(`/web4/contract/${contractId}/pass`, { game_id: gameId });
 
   const nextRound = async () => {
     try {
@@ -175,15 +182,7 @@ const Game = ({ gameId }) => {
       return;
     }
 
-    try {
-      setAttacking(true);
-      await attack(selectedDice, selectedDefenderDie);
-    } catch (e) {
-      console.error(e);
-      alert('Attack failed');
-    } finally {
-      setAttacking(false);
-    }
+    await attack(selectedDice, selectedDefenderDie);
 
     // Reset selection after attack
     setSelectedDice([]);
@@ -238,12 +237,19 @@ const Game = ({ gameId }) => {
       </div>
 
       {gameState.is_round_over
-        ? <button onClick={nextRound}>Start next round</button>
+        ? <ActionButton onClick={nextRound}
+            progressMessage="Starting next round..."
+            failMessage="Failed to start next round">Start next round</ActionButton>
         : <>
-          {attacking && <p>Attacking...</p>}
-          {!attacking && <button onClick={performAttack} disabled={gameState.players[gameState.current_player] !== playerId || gameState.is_pass_allowed}>Attack</button>}
-          {passing && <p>Passing...</p>}
-          {!passing && <button onClick={pass} disabled={gameState.players[gameState.current_player] !== playerId || !gameState.is_pass_allowed}>Pass</button>}
+          <ActionButton onClick={performAttack}
+            disabled={gameState.players[gameState.current_player] !== playerId || gameState.is_pass_allowed}
+            progressMessage="Attacking..."
+            failMessage="Failed to attack">Attack</ActionButton>
+
+          <ActionButton onClick={pass}
+            disabled={gameState.players[gameState.current_player] !== playerId || !gameState.is_pass_allowed}
+            progressMessage="Passing..."
+            failMessage="Failed to pass">Pass</ActionButton>
         </>}
 
       <AwaitingTurnGamesList gameId={gameId} />
