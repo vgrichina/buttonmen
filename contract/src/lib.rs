@@ -88,6 +88,10 @@ impl Default for Game {
 }
 
 impl Game {
+    pub fn is_game_started(&self) -> bool {
+        !self.players.iter().any(|player| player == "")
+    }
+
     pub fn is_round_over(&self) -> bool {
         self.dice.iter().any(|dice| dice.len() == 0)
     }
@@ -198,6 +202,7 @@ pub struct GameView {
     round: u8,
     wins: Vec<u8>,
 
+    is_game_started: bool,
     is_pass_allowed: bool,
     is_round_over: bool,
     is_game_over: bool,
@@ -294,6 +299,7 @@ impl Contract {
                         captured: game.captured.clone(),
                         round: game.round,
                         wins: game.wins.clone(),
+                        is_game_started: game.is_game_started(),
                         is_pass_allowed: game.is_pass_allowed(),
                         is_round_over: game.is_round_over(),
                         is_game_over: game.is_game_over(),
@@ -1075,6 +1081,7 @@ mod tests {
                         "captured": [[], []],
                         "round": 0,
                         "wins": [0, 0],
+                        "is_game_started": false,
                         "is_pass_allowed": false,
                         "is_round_over": true,
                         "is_game_over": false,
@@ -1118,6 +1125,7 @@ mod tests {
                         "captured": [[], []],
                         "round": 0,
                         "wins": [0, 0],
+                        "is_game_started": true,
                         "is_pass_allowed": true,
                         "is_round_over": false,
                         "is_game_over": false,
@@ -1162,6 +1170,7 @@ mod tests {
                         "captured": [[], []],
                         "round": 5,
                         "wins": [2, 3],
+                        "is_game_started": true,
                         "is_pass_allowed": false,
                         "is_round_over": true,
                         "is_game_over": true,

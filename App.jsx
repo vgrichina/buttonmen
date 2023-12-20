@@ -226,31 +226,34 @@ const Game = ({ gameId }) => {
 
   return (
     <div>
-      <h2>{gameState.players[0]} vs {gameState.players[1]}</h2>
-      <p>Round: {gameState.round + 1}</p>
-      <div className="this-player">
-        {renderDice(gameState.dice[currentPlayerIndex], gameState.players[currentPlayerIndex], gameState.current_player === currentPlayerIndex, gameState.captured[currentPlayerIndex])}
-      </div>
-      <div className="other-player">
-        {gameState.players[otherPlayerIndex] == '' ? <p><b>Waiting for player to join...</b></p>
-          : renderDice(gameState.dice[otherPlayerIndex], gameState.players[otherPlayerIndex], gameState.current_player === otherPlayerIndex, gameState.captured[otherPlayerIndex])}
-      </div>
+      <h2>{gameState.players[0]} vs {gameState.players[1] || '???'}</h2>
+      {gameState.is_game_started
+        ? <>
+          <p>Round: {gameState.round + 1}</p>
+          <div className="this-player">
+            {renderDice(gameState.dice[currentPlayerIndex], gameState.players[currentPlayerIndex], gameState.current_player === currentPlayerIndex, gameState.captured[currentPlayerIndex])}
+          </div>
+          <div className="other-player">
+            {renderDice(gameState.dice[otherPlayerIndex], gameState.players[otherPlayerIndex], gameState.current_player === otherPlayerIndex, gameState.captured[otherPlayerIndex])}
+          </div>
 
-      {gameState.is_round_over
-        ? <ActionButton onClick={nextRound}
-            progressMessage="Starting next round..."
-            failMessage="Failed to start next round">Start next round</ActionButton>
-        : <>
-          <ActionButton onClick={performAttack}
-            disabled={gameState.players[gameState.current_player] !== playerId || gameState.is_pass_allowed}
-            progressMessage="Attacking..."
-            failMessage="Failed to attack">Attack</ActionButton>
+          {gameState.is_round_over
+            ? <ActionButton onClick={nextRound}
+                progressMessage="Starting next round..."
+                failMessage="Failed to start next round">Start next round</ActionButton>
+            : <>
+              <ActionButton onClick={performAttack}
+                disabled={gameState.players[gameState.current_player] !== playerId || gameState.is_pass_allowed}
+                progressMessage="Attacking..."
+                failMessage="Failed to attack">Attack</ActionButton>
 
-          <ActionButton onClick={pass}
-            disabled={gameState.players[gameState.current_player] !== playerId || !gameState.is_pass_allowed}
-            progressMessage="Passing..."
-            failMessage="Failed to pass">Pass</ActionButton>
-        </>}
+              <ActionButton onClick={pass}
+                disabled={gameState.players[gameState.current_player] !== playerId || !gameState.is_pass_allowed}
+                progressMessage="Passing..."
+                failMessage="Failed to pass">Pass</ActionButton>
+            </>}
+        </>
+        : <p><b>Waiting for player to join...</b></p>}
 
       <AwaitingTurnGamesList gameId={gameId} />
     </div>
