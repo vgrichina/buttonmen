@@ -276,35 +276,26 @@ const App = () => {
     );
   }
 
-  const [creatingGame, setCreatingGame] = useState(false);
-
   const path = window.location.pathname;
   const parts = path.split('/');
 
   const createGame = async () => {
-    setCreatingGame(true);
-    try {
-      const gameId = await post(`/web4/contract/${contractId}/create_game`, {
-        // TODO: Let player choose dice set
-        starting_dice: [die(4), die(6), die(8), die(10), die(20)],
-      });
+    const gameId = await post(`/web4/contract/${contractId}/create_game`, {
+      // TODO: Let player choose dice set
+      starting_dice: [die(4), die(6), die(8), die(10), die(20)],
+    });
 
-      console.log('Created game', gameId);
-      // TODO: Push state to history instead?
-      window.location.href = `/games/${gameId}`;
-    } catch (e) {
-      console.error(e);
-      alert('Failed to create game');
-    } finally {
-      setCreatingGame(false);
-    }
+    console.log('Created game', gameId);
+    // TODO: Push state to history instead?
+    window.location.href = `/games/${gameId}`;
   };
 
   if (path === '/') {
     return <>
       <LoggedInBanner />
-      {creatingGame && <p>Creating game...</p>}
-      {!creatingGame && <button onClick={createGame}>Create game</button>}
+      <ActionButton onClick={createGame}
+        progressMessage="Creating game..."
+        failMessage="Failed to create game">Create game</ActionButton>
       <LatestGamesList />
 
       <AwaitingTurnGamesList />
