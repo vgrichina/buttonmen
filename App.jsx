@@ -152,14 +152,8 @@ const Game = ({ gameId }) => {
 
   const pass = () => post(`/web4/contract/${contractId}/pass`, { game_id: gameId });
 
-  const nextRound = async () => {
-    try {
-      await post(`/web4/contract/${contractId}/next_round`, { game_id: gameId });
-    } catch (e) {
-      console.error(e);
-      alert('Failed to start next round');
-    }
-  }
+  const nextRound = () =>
+    post(`/web4/contract/${contractId}/next_round`, { game_id: gameId });
 
   const selectDieForAttack = (index) => {
     setSelectedDice(prev => {
