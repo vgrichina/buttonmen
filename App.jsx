@@ -145,6 +145,15 @@ const Game = ({ gameId }) => {
     }
   }
 
+  const nextRound = async () => {
+    try {
+      await post(`/web4/contract/${contractId}/next_round`, { game_id: gameId });
+    } catch (e) {
+      console.error(e);
+      alert('Failed to start next round');
+    }
+  }
+
   const selectDieForAttack = (index) => {
     setSelectedDice(prev => {
       // Add or remove the die index from the selection
@@ -184,7 +193,9 @@ const Game = ({ gameId }) => {
   const renderDice = (playerDice, dicePlayerId, isActive, captured) => (
     <div style={isActive ? { backgroundColor: 'rgb(255,247,230)' } : {}} >
       <h3>{dicePlayerId} {dicePlayerId == playerId && '(You)'}</h3>
-      { isActive && dicePlayerId == playerId && <p><b>It's your turn</b></p> }
+      { gameState?.is_round_over
+        ?  <p><b>Round over</b></p>
+        : (isActive && dicePlayerId == playerId && <p><b>It's your turn</b></p> )}
       <h4>Dice</h4>
       {playerDice.map((die, index) => {
         const isSelected = !isActive
@@ -201,13 +212,14 @@ const Game = ({ gameId }) => {
         );
       })}
       <h4>Captured</h4>
-      <p>{captured.length > 0 ? captured.map((die) => `D${die}`).join(', ') : 'None'}</p>
-      <p>Score: {captured.reduce((a, b) => a + b, 0)}</p>
+      <p>{captured.length > 0 ? captured.map(({ size }) => `D${size}`).join(', ') : 'None'}</p>
+      <p>Score: {captured.reduce((a, { size }) => a + size, 0)}</p>
+      <p>Wins: {gameState?.wins[gameState.players.indexOf(dicePlayerId)] || 0}</p>
     </div>
   );
 
   if (!gameState) {
-    return <div>Loading...</div>;
+    return <div>Loading...</div>
   }
 
   const currentPlayerIndex = gameState.players.indexOf(playerId);
@@ -215,7 +227,8 @@ const Game = ({ gameId }) => {
 
   return (
     <div>
-      <h2>{gameState.players[0]} playing against {gameState.players[1]}</h2>
+      <h2>{gameState.players[0]} vs {gameState.players[1]}</h2>
+      <p>Round: {gameState.round + 1}</p>
       <div className="this-player">
         {renderDice(gameState.dice[currentPlayerIndex], gameState.players[currentPlayerIndex], gameState.current_player === currentPlayerIndex, gameState.captured[currentPlayerIndex])}
       </div>
@@ -224,10 +237,14 @@ const Game = ({ gameId }) => {
           : renderDice(gameState.dice[otherPlayerIndex], gameState.players[otherPlayerIndex], gameState.current_player === otherPlayerIndex, gameState.captured[otherPlayerIndex])}
       </div>
 
-      {attacking && <p>Attacking...</p>}
-      {!attacking && <button onClick={performAttack} disabled={gameState.players[gameState.current_player] !== playerId || gameState.is_pass_allowed}>Attack</button>}
-      {passing && <p>Passing...</p>}
-      {!passing && <button onClick={pass} disabled={gameState.players[gameState.current_player] !== playerId || !gameState.is_pass_allowed}>Pass</button>}
+      {gameState.is_round_over
+        ? <button onClick={nextRound}>Start next round</button>
+        : <>
+          {attacking && <p>Attacking...</p>}
+          {!attacking && <button onClick={performAttack} disabled={gameState.players[gameState.current_player] !== playerId || gameState.is_pass_allowed}>Attack</button>}
+          {passing && <p>Passing...</p>}
+          {!passing && <button onClick={pass} disabled={gameState.players[gameState.current_player] !== playerId || !gameState.is_pass_allowed}>Pass</button>}
+        </>}
 
       <AwaitingTurnGamesList gameId={gameId} />
     </div>
