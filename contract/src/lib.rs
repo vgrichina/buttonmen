@@ -8,6 +8,7 @@ use near_sdk::serde::{Deserialize, Serialize};
 use near_rng::Rng;
 
 const MAX_LATEST_GAMES: usize = 10;
+const MAX_PLAYER_GAMES: usize = 10;
 
 const DEFAULT_DICE: [Die; 5] = [
     Die { kind: DieKind::Normal, size: 4 },
@@ -233,6 +234,10 @@ impl Default for Player {
 
 impl Player {
     pub fn add_game(&mut self, game_id: String) {
+        if self.games.len() >= MAX_PLAYER_GAMES {
+            panic!("Player {} has too many games", self.id);
+        }
+
         if !self.games.contains(&game_id) {
             self.games.push(game_id);
         }
