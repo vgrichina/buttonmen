@@ -105,7 +105,10 @@ const LatestGamesList = () => {
 
 const AwaitingTurnGamesList = ({ gameId }) => {
   const games = usePolling([playerId], `/api/users/${playerId}/games`);
-  const filteredGames = games?.filter(game => game.id !== gameId && game.current_player == game.players.indexOf(playerId));
+  const filteredGames = games?.filter(game =>
+    game.id !== gameId && (
+        game.current_player == game.players.indexOf(playerId) ||
+        game.dice.some(dice => dice.length === 0) && !game.players.some(p => p == "")));
 
   if (!filteredGames?.length) {
     return null;
