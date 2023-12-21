@@ -554,6 +554,10 @@ impl Contract {
                     panic!("Round is not over yet");
                 }
 
+                if game.is_game_over() {
+                    panic!("Game is over");
+                }
+
                 game.round += 1;
                 let mut rng = Rng::new(&env::random_seed());
                 game.dice = game.starting_dice.iter().map(|dice| roll_dice(&mut rng, dice.clone())).collect();
@@ -986,6 +990,26 @@ mod tests {
 
         login_as("alice.near");
         contract.join_game("1".to_string(), DEFAULT_DICE.to_vec());
+        contract.next_round("1".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Game is over")]
+    fn next_round_game_over() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
+            round: 3,
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![
+                vec![roll(4, 1), roll(6, 1) ],
+                vec![]],
+            captured: vec![vec![die(4), die(6), die(10)], vec![die(10)]],
+            wins: vec![3, 2],
+            ..Default::default()
+        });
+
         contract.next_round("1".to_string());
     }
 
