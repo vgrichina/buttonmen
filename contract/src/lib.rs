@@ -231,6 +231,14 @@ impl Default for Player {
     }
 }
 
+impl Player {
+    pub fn add_game(&mut self, game_id: String) {
+        if !self.games.contains(&game_id) {
+            self.games.push(game_id);
+        }
+    }
+}
+
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct Contract {
@@ -261,6 +269,18 @@ impl Default for Contract {
 
 #[near_bindgen]
 impl Contract {
+
+    pub fn get_player(&self, player_id: String) -> Player {
+        match self.players.get(&player_id) {
+            Some(player) => player,
+            None => Player {
+                id: player_id,
+                games: vec![],
+                ..Default::default()
+            }
+        }
+    }
+
     /// Learn more about web4 here: https://web4.near.page
     pub fn web4_get(&self, request: Web4Request) -> Web4Response {
         if request.path == "/" || request.path.starts_with("/games/") {
@@ -325,10 +345,7 @@ impl Contract {
             let user_id = parts[3];
 
             if parts[4] == "games" {
-                let user_games_ids = match self.players.get(&user_id.to_string()) {
-                    Some(player) => player.games.clone(),
-                    None => vec![],
-                };
+                let user_games_ids = self.get_player(user_id.to_string()).games;
 
                 return Web4Response::Body {
                     content_type: "application/json".to_owned(),
@@ -383,14 +400,8 @@ impl Contract {
             self.latest_games.remove(0);
         }
 
-        let mut player = self.players.get(&player_id.to_string()).unwrap_or_else(|| {
-            let player = Player {
-                id: player_id.to_string(),
-                ..Default::default()
-            };
-            player
-        });
-        player.games.push(game_id.clone());
+        let mut player = self.get_player(player_id.to_string());
+        player.add_game(game_id.clone());
         self.players.insert(&player_id.to_string(), &player);
 
         return game_id;
@@ -441,14 +452,8 @@ impl Contract {
                         // Update the game state
                         self.games.insert(&game_id, &game);
 
-                        let mut player = self.players.get(&player_id.to_string()).unwrap_or_else(|| {
-                            let player = Player {
-                                id: player_id.to_string(),
-                                ..Default::default()
-                            };
-                            player
-                        });
-                        player.games.push(game_id.clone());
+                        let mut player = self.get_player(player_id.to_string());
+                        player.add_game(game_id.clone());
                         self.players.insert(&player_id.to_string(), &player);
                     },
                     None => {
@@ -846,6 +851,7 @@ mod tests {
         assert_eq!(game.is_round_over(), true);
     }
 
+    #[test]
     fn attack_skill_success() {
         let mut contract = Contract::default();
         contract.games.insert(&"1".to_string(), &Game {
