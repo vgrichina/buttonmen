@@ -56,7 +56,7 @@ impl Debug for DieRoll {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Game {
     id: String,
@@ -241,6 +241,10 @@ impl Player {
         if !self.games.contains(&game_id) {
             self.games.push(game_id);
         }
+    }
+
+    pub fn remove_game(&mut self, game_id: String) {
+        self.games.retain(|id| id != &game_id);
     }
 }
 
@@ -465,6 +469,33 @@ impl Contract {
                         panic!("Game is full: {}", game_id);
                     }
                 }
+            }
+            None => {
+                panic!("Game not found: {}", game_id);
+            }
+        }
+    }
+
+    pub fn finish_game(&mut self, game_id: String) -> () {
+        let player_id = env::predecessor_account_id().to_string();
+
+        match self.games.get(&game_id) {
+            Some(mut game) => {
+                if !game.players.iter().any(|p| p == &player_id) {
+                    panic!("Player {} has not joined game {}", player_id, game_id);
+                }
+
+                if !game.is_game_over() {
+                    panic!("Game is not over");
+                }
+
+                for player_id in game.players.iter() {
+                    let mut player = self.get_player(player_id.to_string());
+                    player.remove_game(game_id.clone());
+                    self.players.insert(&player_id.to_string(), &player);
+                }
+
+                self.games.remove(&game_id);
             }
             None => {
                 panic!("Game not found: {}", game_id);
@@ -1060,6 +1091,78 @@ mod tests {
             vec![roll(4, 2), roll(6, 2), roll(8, 1), roll(10, 4), roll(20, 3)]]);
         assert_eq!(game.captured, vec![vec![], vec![]] as Vec<Vec<Die>>);
         assert_eq!(game.wins, vec![1, 0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Player eve.near has not joined game 1")]
+    fn finish_game_not_joined() {
+        let mut contract = Contract::default();
+        contract.create_game(DEFAULT_DICE.to_vec());
+
+        login_as("alice.near");
+        contract.join_game("1".to_string(), DEFAULT_DICE.to_vec());
+
+        login_as("eve.near");
+        contract.finish_game("1".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Game not found: 1")]
+    fn finish_game_not_found() {
+        let mut contract = Contract::default();
+        contract.finish_game("1".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Game is not over")]
+    fn finish_game_not_over() {
+        let mut contract = Contract::default();
+        contract.games.insert(&"1".to_string(), &Game {
+            id: "1".to_string(),
+            round: 1,
+            players: vec!["bob.near".to_string(), "alice.near".to_string()],
+            current_player: 0,
+            dice: vec![
+                vec![roll(4, 1), roll(6, 1) ],
+                vec![]],
+            captured: vec![vec![die(4), die(6), die(10)], vec![die(10)]],
+            wins: vec![1, 0],
+            ..Default::default()
+        });
+
+        contract.finish_game("1".to_string());
+    }
+
+    #[test]
+    fn finish_game_success() {
+        let mut contract = Contract::default();
+
+        // Use create_game an join_game to test the bigger flow
+        contract.create_game(DEFAULT_DICE.to_vec());
+        login_as("alice.near");
+        contract.join_game("1".to_string(), DEFAULT_DICE.to_vec());
+
+        // Check that players have game in the list
+        let bob = contract.get_player("bob.near".to_string());
+        assert_eq!(bob.games, vec!["1".to_string()]);
+        let alice = contract.get_player("alice.near".to_string());
+        assert_eq!(alice.games, vec!["1".to_string()]);
+
+        // Patch game state to game over
+        let mut game = contract.games.get(&"1".to_string()).unwrap();
+        game.round = 3;
+        game.wins = vec![3, 0];
+        contract.games.insert(&"1".to_string(), &game);
+
+        contract.finish_game("1".to_string());
+
+        assert_eq!(contract.games.get(&"1".to_string()), None);
+
+        // Check that players don't have game in the list
+        let bob = contract.get_player("bob.near".to_string());
+        assert_eq!(bob.games, vec![] as Vec<String>);
+        let alice = contract.get_player("alice.near".to_string());
+        assert_eq!(alice.games, vec![] as Vec<String>);
     }
 
     fn request_path(path: &str) -> Web4Request {

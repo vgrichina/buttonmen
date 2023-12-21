@@ -158,6 +158,9 @@ const Game = ({ gameId }) => {
   const nextRound = () =>
     post(`/web4/contract/${contractId}/next_round`, { game_id: gameId });
 
+  const finishGame = () =>
+    post(`/web4/contract/${contractId}/finish_game`, { game_id: gameId });
+
   const selectDieForAttack = (index) => {
     setSelectedDice(prev => {
       // Add or remove the die index from the selection
@@ -229,7 +232,13 @@ const Game = ({ gameId }) => {
         ? <>
           <p>Round: {gameState.round + 1}</p>
 
-          {gameState?.is_round_over
+          {gameState.is_game_over
+            ? <p><b>Game over – {
+              gameState.wins[currentPlayerIndex] > gameState.wins[otherPlayerIndex]
+              ? 'You win'
+              : 'You lose'
+            }</b></p>
+            : gameState.is_round_over
             ? <p><b>Round over – {
               scores[currentPlayerIndex] > scores[otherPlayerIndex]
               ? 'You win'
@@ -247,9 +256,13 @@ const Game = ({ gameId }) => {
           </div>
 
           {gameState.is_round_over
-            ? <ActionButton onClick={nextRound}
+            ? (gameState.is_game_over
+              ? <ActionButton onClick={finishGame}
+                progressMessage="Finishing game..."
+                failMessage="Failed to finish game">Finish game</ActionButton>
+              : <ActionButton onClick={nextRound}
                 progressMessage="Starting next round..."
-                failMessage="Failed to start next round">Start next round</ActionButton>
+                failMessage="Failed to start next round">Start next round</ActionButton>)
             : <>
               <ActionButton onClick={performAttack}
                 disabled={gameState.players[gameState.current_player] !== playerId || gameState.is_pass_allowed}
