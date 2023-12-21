@@ -183,12 +183,11 @@ const Game = ({ gameId }) => {
     setSelectedDefenderDie(null);
   };
 
+  const totalScore = (captured) => captured.reduce((a, { size }) => a + size, 0);
+
   const renderDice = (playerDice, dicePlayerId, isActive, captured) => (
     <div style={isActive ? { backgroundColor: 'rgb(255,247,230)' } : {}} >
       <h3>{dicePlayerId} {dicePlayerId == playerId && '(You)'}</h3>
-      { gameState?.is_round_over
-        ?  <p><b>Round over</b></p>
-        : (isActive && dicePlayerId == playerId && <p><b>It's your turn</b></p> )}
       <h4>Dice</h4>
       {playerDice.map((die, index) => {
         const isSelected = !isActive
@@ -206,7 +205,7 @@ const Game = ({ gameId }) => {
       })}
       <h4>Captured</h4>
       <p>{captured.length > 0 ? captured.map(({ size }) => `D${size}`).join(', ') : 'None'}</p>
-      <p>Score: {captured.reduce((a, { size }) => a + size, 0)}</p>
+      <p>Score: {totalScore(captured)}</p>
       <p>Wins: {gameState?.wins[gameState.players.indexOf(dicePlayerId)] || 0}</p>
     </div>
   );
@@ -218,12 +217,25 @@ const Game = ({ gameId }) => {
   const currentPlayerIndex = gameState.players.indexOf(playerId);
   const otherPlayerIndex = (currentPlayerIndex + 1) % 2;
 
+  const scores = gameState.captured.map(captured => totalScore(captured));
+
   return (
     <div>
       <h2>{gameState.players[0]} vs {gameState.players[1] || '???'}</h2>
       {gameState.is_game_started
         ? <>
           <p>Round: {gameState.round + 1}</p>
+
+          {gameState?.is_round_over
+            ? <p><b>Round over – {
+              scores[currentPlayerIndex] > scores[otherPlayerIndex]
+              ? 'You win'
+              : scores[currentPlayerIndex] < scores[otherPlayerIndex]
+              ? 'You lose'
+              : 'Draw'
+            }</b></p>
+            : gameState.current_player == currentPlayerIndex && <p><b>It's your turn</b></p>}
+
           <div className="this-player">
             {renderDice(gameState.dice[currentPlayerIndex], gameState.players[currentPlayerIndex], gameState.current_player === currentPlayerIndex, gameState.captured[currentPlayerIndex])}
           </div>
