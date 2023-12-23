@@ -2,7 +2,7 @@ use core::fmt::{Debug, Formatter};
 
 use near_sdk::borsh::{self, to_vec, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
-use near_sdk::{env, serde_json, near_bindgen, require};
+use near_sdk::{env, serde_json, near_bindgen, require, Promise};
 use near_sdk::serde::{Deserialize, Serialize};
 
 use near_rng::Rng;
@@ -67,6 +67,7 @@ pub struct Game {
     captured: Vec<Vec<Die>>,
     round: u8,
     wins: Vec<u8>,
+    deposit: u128,
 
     // NOTE: This is reserved for future upgrades, can be replaced with enum later
     reserved: Option<()>,
@@ -83,6 +84,7 @@ impl Default for Game {
             captured: vec![vec![], vec![]],
             round: 0,
             wins: vec![0, 0],
+            deposit: 0,
             reserved: None,
         }
     }
@@ -398,6 +400,7 @@ impl Contract {
             current_player: 0xFF,
             starting_dice: vec![starting_dice.clone(), vec![]],
             dice: vec![roll_dice(&mut rng, starting_dice), vec![]],
+            deposit: env::attached_deposit(),
             ..Default::default()
         };
 
@@ -476,7 +479,7 @@ impl Contract {
         }
     }
 
-    pub fn finish_game(&mut self, game_id: String) -> () {
+    pub fn finish_game(&mut self, game_id: String) -> Promise {
         let player_id = env::predecessor_account_id().to_string();
 
         match self.games.get(&game_id) {
@@ -497,6 +500,8 @@ impl Contract {
 
                 self.games.remove(&game_id);
                 self.latest_games.retain(|id| id != &game_id);
+
+                Promise::new(game.players[0].clone().parse().unwrap()).transfer(game.deposit)
             }
             None => {
                 panic!("Game not found: {}", game_id);
@@ -708,8 +713,10 @@ fn resource_not_found(path: String) -> Web4Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use near_sdk::mock::VmAction;
     use near_sdk::testing_env;
     use near_sdk::test_utils::VMContextBuilder;
+    use near_sdk::test_utils::get_created_receipts;
 
     fn login_as(player_id: &str) {
         testing_env!(VMContextBuilder::new()
@@ -737,20 +744,28 @@ mod tests {
     #[test]
     fn create_game() {
         let mut contract = Contract::default();
+        // set deposit to 0.1 NEAR
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("bob.near".parse().unwrap())
+            .attached_deposit(100000000000000000000000)
+            .build());
+
         contract.create_game(DEFAULT_DICE.to_vec());
 
         assert_eq!(contract.last_game_id, 1);
+        assert_eq!(contract.latest_games, vec!["1".to_string()]);
         let game = contract.games.get(&"1".to_string()).unwrap();
         assert_eq!(game.id, "1");
         assert_eq!(game.players, vec!["bob.near".to_string(), "".to_string()]);
         assert_eq!(game.current_player, 0xff);
+        assert_eq!(game.round, 0);
         assert_eq!(game.dice.len(), 2);
         assert_eq!(game.dice[0].len(), 5);
         assert_eq!(game.dice[1].len(), 0);
-        assert_eq!(game.captured.len(), 2);
-        assert_eq!(game.captured[0].len(), 0);
-        assert_eq!(game.captured[1].len(), 0);
-        assert_eq!(contract.latest_games, vec!["1".to_string()]);
+        assert_eq!(game.captured, vec![vec![], vec![]]);
+        assert_eq!(game.wins, vec![0, 0]);
+        assert_eq!(game.starting_dice, vec![DEFAULT_DICE.to_vec(), vec![]]);
+        assert_eq!(game.deposit, 100000000000000000000000);
     }
 
     #[test]
@@ -1138,6 +1153,12 @@ mod tests {
     fn finish_game_success() {
         let mut contract = Contract::default();
 
+        // set deposit to 0.1 NEAR
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id("bob.near".parse().unwrap())
+            .attached_deposit(100000000000000000000000)
+            .build());
+
         // Use create_game an join_game to test the bigger flow
         contract.create_game(DEFAULT_DICE.to_vec());
         login_as("alice.near");
@@ -1167,6 +1188,14 @@ mod tests {
 
         // Check that contract doesn't have game in the list
         assert_eq!(contract.latest_games, vec![] as Vec<String>);
+
+        // Check that deposit got refunded to bob.near
+        let receipts = get_created_receipts();
+        assert_eq!(receipts.len(), 1);
+        let actions = &receipts[0].actions;
+        println!("actions: {:?}", actions);
+        assert_eq!(actions.len(), 1);
+        assert!(matches!(actions[0], VmAction::Transfer { deposit: 100000000000000000000000 }));
     }
 
     fn request_path(path: &str) -> Web4Request {
