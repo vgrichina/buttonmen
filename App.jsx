@@ -158,8 +158,10 @@ const Game = ({ gameId }) => {
   const nextRound = () =>
     post(`/web4/contract/${contractId}/next_round`, { game_id: gameId });
 
-  const finishGame = () =>
-    post(`/web4/contract/${contractId}/finish_game`, { game_id: gameId });
+  const finishGame = async () => {
+    await post(`/web4/contract/${contractId}/finish_game`, { game_id: gameId });
+    window.location.href = '/';
+  };
 
   const selectDieForAttack = (index) => {
     setSelectedDice(prev => {

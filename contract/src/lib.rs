@@ -496,6 +496,7 @@ impl Contract {
                 }
 
                 self.games.remove(&game_id);
+                self.latest_games.retain(|id| id != &game_id);
             }
             None => {
                 panic!("Game not found: {}", game_id);
@@ -1163,6 +1164,9 @@ mod tests {
         assert_eq!(bob.games, vec![] as Vec<String>);
         let alice = contract.get_player("alice.near".to_string());
         assert_eq!(alice.games, vec![] as Vec<String>);
+
+        // Check that contract doesn't have game in the list
+        assert_eq!(contract.latest_games, vec![] as Vec<String>);
     }
 
     fn request_path(path: &str) -> Web4Request {
