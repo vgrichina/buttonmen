@@ -10,7 +10,7 @@
     "build": "bun build ./index.jsx --outdir ./dist && cp -R ./public/* ./dist",
     "build:watch": "bun build ./index.jsx --outdir ./dist --watch",
     "build:contract": "cd contract && RUSTFLAGS='-C link-arg=-s' cargo build --target wasm32-unknown-unknown --release",
-    "test:contract": "cd contract && cargo test -- --nocapture",
+    "test:contract": "cd contract && cargo test",
     "deploy:prod" : "NODE_ENV=mainnet npx web4-deploy dist buttonmen.near --deploy-contract contract/target/wasm32-unknown-unknown/release/web4_demo.wasm",
     "deploy:dev" : "npx near-cli dev-deploy contract/target/wasm32-unknown-unknown/release/web4_demo.wasm"
   }
